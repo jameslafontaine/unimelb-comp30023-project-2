@@ -1,0 +1,5 @@
+*.o
+test.sh
+testval.sh
+src-proj1/
+debug/

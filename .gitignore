@@ -3,3 +3,6 @@ test.sh
 testval.sh
 src-proj1/
 debug/
+*.a
+*.txt
+dict.c

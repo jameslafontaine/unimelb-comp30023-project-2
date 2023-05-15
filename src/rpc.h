@@ -14,7 +14,8 @@ typedef struct rpc_client rpc_client;
 /* The payload for requests/responses */
 typedef struct {
     int data1; // 64 bit at largest
-    size_t data2_len;
+    size_t data2_len; // integer - number of bytes (number of bytes differs for different data
+                      // types across different architectures so need encoding)
     void *data2;
 } rpc_data;
 

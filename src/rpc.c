@@ -2,6 +2,7 @@
 #define _XOPEN_SOURCE 600
 
 #include "rpc.h"
+#include "dict.h"
 #include <stdlib.h>
 #include <netdb.h>
 #include <stdio.h>
@@ -12,7 +13,12 @@
 #include <fcntl.h>
 
 #define BASE_10 10 
-#define MAX_PORT_SIZE 16
+#define MAX_PORT_DIGITS 5
+#define MAX_PORT_NUM 65535
+#define MAX_NAME_LEN 1000
+#define MIN_NAME_LEN 1
+#define MIN_ASCII_CHAR 32
+#define MAX_ASCII_CHAR 126
 
 int create_listening_socket(char* service);
 
@@ -22,8 +28,8 @@ int create_listening_socket(char* service);
 struct rpc_server {
     /* Add variable(s) for server state */ // use primitive data types that don't require free() calls
     int listen_sockfd;
-    char port[MAX_PORT_SIZE+1];
-
+    char port[MAX_PORT_DIGITS+1];
+	dict_ptr function_dict;
 
 };
 
@@ -36,24 +42,34 @@ rpc_server *rpc_init_server(int port) {
     // return NULL on failure
     if (port == NULL)
         fprintf(stderr, "ERROR: No port provided\n");
+		free(srv);
         return NULL;
+
+	if (port > MAX_PORT_NUM || port < 0) {
+		fprintf(stderr, "ERROR: Please provide a valid port number between 0 and 65535\n");
+		free(srv);
+        return NULL;
+	}
 
 	//if (argc < 2) {
 	//	fprintf(stderr, "ERROR, no port provided\n");
 	//	exit(EXIT_FAILURE);
 	//}
 
-	/* Create the listening socket */
-    //char port_buffer[MAX_PORT_SIZE + 1];
+	/* Store the provided port number in server state as a string*/
+    //char port_buffer[MAX_PORT_DIGITS + 1];
     itoa(port, srv->port, BASE_10);
-    printf("Server Port: %s\n", srv->port);
+    printf("Server Provided Port: %s\n", srv->port);
     //strcpy(srv->port, port_buffer);
 
+	/* Create the listening socket */
 	if ((srv->listen_sockfd = create_listening_socket(srv->port)) < 0) {
         fprintf(stderr, "ERROR: Failed to create listening socket\n");
+		free(srv);
         return NULL;
     }
 
+	srv->function_dict = dict_new();
 
     // if failure return NULL, else return srv
     return srv;
@@ -69,12 +85,36 @@ rpc_server *rpc_init_server(int port) {
 // Should be able to register at least 10 functions (or any amount really) for full marks, 
 // but can start with only keeping track of one for testing purposes
 int rpc_register(rpc_server *srv, char *name, rpc_handler handler) {
-    return -1;
+
+	if (srv == NULL || name == NULL || handler == NULL) {
+		return -1;
+	}
+
+	/* Validate the provided name */
+
+	// Check that name only contains printable ASCII characters between 32 and 126
+	for (int i=0; i < strlen(name); i++) {
+		if ((int) name[i] < MIN_ASCII_CHAR || (int) name[i] > MAX_ASCII_CHAR) {
+			fprintf(stderr, "ERROR: Invalid characters used in name\n");
+			return -1;
+		}
+	}
+	// Check that strlen is greater than 0 and less than 1001
+	if (strlen(name) < MIN_NAME_LEN || strlen(name) > MAX_NAME_LEN) {
+		fprintf(stderr, "ERROR: Name too short or long\n");
+		return -1;
+	}
+	
+	/* Name is valid so we can register the function */
+
+	// If there is already function registered with name, replace the old function with the new one
+	// Otherwise, simply regiser the new function under the new name.
+	dict_add(srv->function_dict, name, handler);
 }
 
 
 // Waits for incoming requests for any of the registered functions, or rpc_find, on the
-// port specified in rpc_init_server of any interfance. If it is a function call request, it will
+// port specified in rpc_init_server of any interface. If it is a function call request, it will
 // call the requested function, send a reply to the caller, and resume waiting for new
 // requests. If it is rpc_find, it will reply to the caller saying whether the name was found or not,
 // or possibly an error code
@@ -94,9 +134,9 @@ void rpc_serve_all(rpc_server *srv) {
 
     // Listen on socket - means we're ready to accept connections,
 	// incoming connection requests will be queued, man 3 listen
-	if (listen(sockfd, 5) < 0) {
+	if (listen(sockfd, 10) < 0) {
 		perror("listen");
-		exit(EXIT_FAILURE);
+		//exit(EXIT_FAILURE);
 	}
 
 	// Accept a connection - blocks until a connection is ready to be accepted
@@ -111,6 +151,49 @@ void rpc_serve_all(rpc_server *srv) {
 
 	// Read characters from the connection, then process
 	while (1) {
+		// n is number of characters read
+	int n;
+	char buffer[256];
+	n = read(newsockfd, buffer, 256);
+	if (n < 0) {
+		perror("read");
+		exit(EXIT_FAILURE);
+	}
+	if (n < 4) {
+		fprintf(stderr, "Bad request from server\n");
+		exit(EXIT_FAILURE);
+	}
+
+	// Number of numbers expected
+	uint32_t number_of_numbers = ntohl(*(uint32_t*)&buffer);
+	if (n < number_of_numbers * 4 + 4) {
+		fprintf(stderr, "Haven't received enough numbers (really?) - "
+						"Rerun if you are completing 2.2.1\n");
+		exit(EXIT_FAILURE);
+	}
+	// Calculate sum
+	uint32_t sum = 0;
+	for (int i = 0; i < number_of_numbers; i++) {
+		uint32_t num = ntohl(*(uint32_t*)&buffer[4 + i * 4]);
+		sum += num;
+	}
+
+	// Send result
+	// For convenience, use second buffer...
+	unsigned char buffer2[8] = {0,
+								0,
+								0,
+								1,
+								sum >> 24,
+								(sum & 0xFF0000) >> 16,
+								(sum & 0xFF00) >> 8,
+								sum & 0xFF};
+	printf("Result: %u\n", sum);
+	n = write(newsockfd, buffer2, 8);
+	if (n < 0) {
+		perror("write");
+		exit(EXIT_FAILURE);
+	}
 		n = read(newsockfd, buffer, 255); // n is number of characters read
 		if (n < 0) {
 			perror("ERROR reading from socket");
@@ -167,7 +250,7 @@ void rpc_serve_all(rpc_server *srv) {
 struct rpc_client {
     /* Add variable(s) for client state */
     int sockfd;
-    char port[MAX_PORT_SIZE+1];
+    char port[MAX_PORT_DIGITS+1];
 
 };
 
@@ -175,6 +258,8 @@ struct rpc_client {
 struct rpc_handle { // handle into rpc like a file handle that lets the client
                     // invoke a function. Returned by rpc_find and then used by rpc_call
     /* Add variable(s) for handle */
+	char *name;
+	rpc_handler handler;
 
 };
 
@@ -187,6 +272,18 @@ rpc_client *rpc_init_client(char *addr, int port) {
     
     // Malloc client state
     rpc_client* cl = (rpc_client *) malloc(sizeof(rpc_client));
+
+	// return NULL on failure
+    if (port == NULL)
+        fprintf(stderr, "ERROR: No port provided\n");
+		free(cl);
+        return NULL;
+
+	if (port > MAX_PORT_NUM || port < 0) {
+		fprintf(stderr, "ERROR: Please provide a valid port number between 0 and 65535\n");
+		free(cl);
+        return NULL;
+	}
 
     int s;
 	struct addrinfo hints, *servinfo, *rp;
@@ -205,14 +302,15 @@ rpc_client *rpc_init_client(char *addr, int port) {
 	// The getaddrinfo() function combines the functionality provided by the
 	// gethostbyname(3) and getservbyname(3) functions into a single interface
     
-    //char port_buffer[MAX_PORT_SIZE + 1];
+    //char port_buffer[MAX_PORT_DIGITS + 1];
     itoa(port, cl->port, BASE_10);
-    printf("Client Port: %s\n", cl->port);
+    printf("Client Provided Port: %s\n", cl->port);
     //strcpy(cl->port, port_buffer);
 
 	s = getaddrinfo(addr, cl->port, &hints, &servinfo);
 	if (s != 0) {
 		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(s));
+		free(cl);
 		return NULL;
 	}
 
@@ -231,6 +329,7 @@ rpc_client *rpc_init_client(char *addr, int port) {
 	}
 	if (rp == NULL) {
 		fprintf(stderr, "client: failed to connect\n");
+		free(cl);
 		return NULL;
 	}
 
@@ -251,6 +350,51 @@ rpc_handle *rpc_find(rpc_client *cl, char *name) {
 
     // Persistent connection from client to server
 	while (1) {
+		// Numbers to buffer
+	for (int i = 1; i < argc; i++) {
+		uint32_t n = atoi(argv[i]);
+		if (n < 0) {
+			fprintf(stderr, "Bad input\n");
+			exit(EXIT_FAILURE);
+		}
+		uint32_t* val = (uint32_t*)&buffer[(i - 1) * 4];
+		*val = htonl(n);
+	}
+
+	// Number of numbers to be sent, 4 byte prefix
+	uint32_t num_of_numbers = argc - 1;
+	char buffer2[4];
+	uint32_t* buffer2_cast = (uint32_t*)buffer2;
+	*buffer2_cast = htonl(num_of_numbers);
+
+	// Send prefix to server
+	n = write(sockfd, buffer2, 4);
+	if (n < 0) {
+		perror("socket");
+		exit(EXIT_FAILURE);
+	}
+	// sleep(2);
+	// Send buffer
+	n = write(sockfd, buffer, num_of_numbers * 4);
+	if (n < 0) {
+		perror("socket");
+		exit(EXIT_FAILURE);
+	}
+
+	// Read message from server
+	n = read(sockfd, buffer, 255);
+	if (n < 0) {
+		perror("read");
+		exit(EXIT_FAILURE);
+	}
+	if (n != 8 || buffer[0] != 0 || buffer[1] != 0 || buffer[2] != 0 ||
+		buffer[3] != 1) {
+		fprintf(stderr, "Bad response from server\n");
+		exit(EXIT_FAILURE);
+	}
+	// Print result
+	uint32_t result = ntohl(*(uint32_t*)&buffer[4]);
+	printf("The result: %u\n", result);
 		// Read message from stdin
 		printf("Please enter the message: ");
 		if (fgets(buffer, 255, stdin) == NULL) {
@@ -297,6 +441,51 @@ rpc_data *rpc_call(rpc_client *cl, rpc_handle *h, rpc_data *payload) {
 
     // Persistent connection from client to server
 	while (1) {
+		// Numbers to buffer
+	for (int i = 1; i < argc; i++) {
+		uint32_t n = atoi(argv[i]);
+		if (n < 0) {
+			fprintf(stderr, "Bad input\n");
+			exit(EXIT_FAILURE);
+		}
+		uint32_t* val = (uint32_t*)&buffer[(i - 1) * 4];
+		*val = htonl(n);
+	}
+
+	// Number of numbers to be sent, 4 byte prefix
+	uint32_t num_of_numbers = argc - 1;
+	char buffer2[4];
+	uint32_t* buffer2_cast = (uint32_t*)buffer2;
+	*buffer2_cast = htonl(num_of_numbers);
+
+	// Send prefix to server
+	n = write(cl->sockfd, buffer2, 4);
+	if (n < 0) {
+		perror("socket");
+		exit(EXIT_FAILURE);
+	}
+	// sleep(2);
+	// Send buffer
+	n = write(cl->sockfd, buffer, num_of_numbers * 4);
+	if (n < 0) {
+		perror("socket");
+		exit(EXIT_FAILURE);
+	}
+
+	// Read message from server
+	n = read(sockfd, buffer, 255);
+	if (n < 0) {
+		perror("read");
+		exit(EXIT_FAILURE);
+	}
+	if (n != 8 || buffer[0] != 0 || buffer[1] != 0 || buffer[2] != 0 ||
+		buffer[3] != 1) {
+		fprintf(stderr, "Bad response from server\n");
+		exit(EXIT_FAILURE);
+	}
+	// Print result
+	uint32_t result = ntohl(*(uint32_t*)&buffer[4]);
+	printf("The result: %u\n", result);
 		// Read message from stdin
 		printf("Please enter the message: ");
 		if (fgets(buffer, 255, stdin) == NULL) {
@@ -342,6 +531,7 @@ void rpc_close_client(rpc_client *cl) {
         close(cl->sockfd);
         free(cl);
         cl = NULL;
+		return;
     }
     
     // If client has already been closed or cl == NULL simply return without error

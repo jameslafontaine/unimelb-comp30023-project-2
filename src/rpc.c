@@ -246,11 +246,65 @@ void rpc_serve_all(rpc_server *srv) {
 
 
 
-		// handle call requests
+		/* Handle call requests*/
 		else if (!strcmp(buffer[0], 'c')) {
 			int64_t data1;
 
-			
+			// read in name length prefix
+			n = read(newsockfd, buffer, NAME_LEN_PREFIX);
+			while (n < NAME_LEN_PREFIX) {
+				printf("Haven't received full name length prefix yet - reading more...\n");
+				n += read(newsockfd, buffer+n, 1);
+				printf("Have now received %d bytes in total\n", n);
+			}
+			func_name_len = ntohs(*(uint16_t*)&buffer);
+			printf("Function name length: %hu\n", func_name_len);
+			// should probably move this check to rpc_find but doesn't hurt to have it here as well
+			// if it doesn't mess anything up (except for the fact that it is clogging up the code)
+			if (func_name_len < MIN_NAME_LEN || func_name_len > MAX_NAME_LEN) {
+				fprintf(stderr, "Please provide a function name between 1 and 1000 characters in length\n");
+				// reply with error code
+				buffer[0] = 'e';
+				buffer[1] = ERRCODE_NAME_LEN;
+				n = write(sockfd, buffer, 2);
+				if (n < 0) {
+					perror("socket");
+					//exit(EXIT_FAILURE);
+				}
+				continue;
+			}
+			// read in the actual function name
+			n = read(newsockfd, buffer, func_name_len);
+			while (n < func_name_len) {
+				printf("Haven't received full function name yet - reading more...\n");
+				n += read(newsockfd, buffer+n, func_name_len - n);
+				printf("Have now received %d bytes in total\n", n);
+			}
+			memcpy(func_name, buffer, MAX_NAME_LEN);
+			func_name[func_name_len] = '\0';
+			printf("Function name: %s\n", func_name);
+			if (dict_find(srv->function_dict, func_name) != NULL) {
+				// let the caller know that the function was found
+				buffer[0] = 'r';
+				buffer[1] = 's';
+				n = write(sockfd, buffer, 2);
+				if (n < 0) {
+					perror("socket");
+					//exit(EXIT_FAILURE);
+				}
+				continue;
+			}
+			else {
+				// let the caller know that the function was not found
+				buffer[0] = 'r';
+				buffer[1] = 'f';
+				n = write(sockfd, buffer, 2);
+				if (n < 0) {
+					perror("socket");
+					//exit(EXIT_FAILURE);
+				}
+				continue;
+			}
 		}
 
 		// Invalid prefix

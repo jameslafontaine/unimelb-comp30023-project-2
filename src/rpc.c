@@ -19,6 +19,17 @@
 #define MIN_NAME_LEN 1
 #define MIN_ASCII_CHAR 32
 #define MAX_ASCII_CHAR 126
+#define MAX_DATA1_BYTES 8
+#define MAX_DATA2_BYTES 100000
+#define MAX_REQUEST_BYTES 102000
+#define FIND_REQUEST_BYTES 1005
+#define NAME_LEN_PREFIX 2
+
+#define ERROR_MSG_SIZE 2
+
+#define ERRCODE_NAME_LEN 11
+
+#define RESP_MSG_SIZE 100100
 
 int create_listening_socket(char* service);
 
@@ -107,7 +118,7 @@ int rpc_register(rpc_server *srv, char *name, rpc_handler handler) {
 	
 	/* Name is valid so we can register the function */
 
-	// If there is already function registered with name, replace the old function with the new one
+	// If there is already a function registered with name, replace the old function with the new one
 	// Otherwise, simply regiser the new function under the new name.
 	dict_add(srv->function_dict, name, handler);
 }
@@ -127,13 +138,19 @@ void rpc_serve_all(rpc_server *srv) {
     char* port = srv->port;
     int sockfd = srv->listen_sockfd;
     int newsockfd, n, i;
-	char buffer[256], ip[INET6_ADDRSTRLEN];
+	char buffer[MAX_REQUEST_BYTES], ip[INET6_ADDRSTRLEN];
 	struct sockaddr_in client_addr;
 	socklen_t client_addr_size;
+
+	char func_name[MAX_NAME_LEN + 1];
+	uint16_t func_name_len;
 
 
     // Listen on socket - means we're ready to accept connections,
 	// incoming connection requests will be queued, man 3 listen
+
+	// maybe change to while loop so that listen() is repeatedly called until success or
+	// just remove exit()
 	if (listen(sockfd, 10) < 0) {
 		perror("listen");
 		//exit(EXIT_FAILURE);
@@ -146,41 +163,127 @@ void rpc_serve_all(rpc_server *srv) {
 		accept(sockfd, (struct sockaddr*)&client_addr, &client_addr_size);
 	if (newsockfd < 0) {
 		perror("accept");
-		exit(EXIT_FAILURE);
+		//exit(EXIT_FAILURE);
 	}
-
+	
 	// Read characters from the connection, then process
 	while (1) {
 		// n is number of characters read
-	int n;
-	char buffer[256];
-	n = read(newsockfd, buffer, 256);
-	if (n < 0) {
-		perror("read");
-		exit(EXIT_FAILURE);
-	}
-	if (n < 4) {
-		fprintf(stderr, "Bad request from server\n");
-		exit(EXIT_FAILURE);
-	}
+		int n;
+		// move memset to outside while loop if it causes program to be slow (in which case will
+		// just have to be careful not to read wrong sections of buffer into memory)
+		memset(buffer, 0, sizeof(buffer));
+		n = read(newsockfd, buffer, 1);
+		if (n < 0) {
+			perror("read");
+			exit(EXIT_FAILURE);
+		}
+		if (n < 1) {
+			fprintf(stderr, "Bad request received by server - no message type prefix\n");
+			exit(EXIT_FAILURE);
+		}
 
-	// Number of numbers expected
-	uint32_t number_of_numbers = ntohl(*(uint32_t*)&buffer);
-	if (n < number_of_numbers * 4 + 4) {
-		fprintf(stderr, "Haven't received enough numbers (really?) - "
-						"Rerun if you are completing 2.2.1\n");
-		exit(EXIT_FAILURE);
-	}
-	// Calculate sum
-	uint32_t sum = 0;
-	for (int i = 0; i < number_of_numbers; i++) {
-		uint32_t num = ntohl(*(uint32_t*)&buffer[4 + i * 4]);
-		sum += num;
-	}
+		printf("Message type prefix: %c\n", buffer[0]);
 
-	// Send result
-	// For convenience, use second buffer...
-	unsigned char buffer2[8] = {0,
+		/* Handle find requests */
+		if (!strcmp(buffer[0], 'f')) {
+			// read in name length prefix
+			n = read(newsockfd, buffer, NAME_LEN_PREFIX);
+			while (n < NAME_LEN_PREFIX) {
+				printf("Haven't received full name length prefix yet - reading more...\n");
+				n += read(newsockfd, buffer+n, 1);
+				printf("Have now received %d bytes in total\n", n);
+			}
+			func_name_len = ntohs(*(uint16_t*)&buffer);
+			printf("Function name length: %hu\n", func_name_len);
+			// should probably move this check to rpc_find but doesn't hurt to have it here as well
+			// if it doesn't mess anything up (except for the fact that it is clogging up the code)
+			if (func_name_len < MIN_NAME_LEN || func_name_len > MAX_NAME_LEN) {
+				fprintf(stderr, "Please provide a function name between 1 and 1000 characters in length\n");
+				// reply with error code
+				buffer[0] = 'e';
+				buffer[1] = ERRCODE_NAME_LEN;
+				n = write(sockfd, buffer, 2);
+				if (n < 0) {
+					perror("socket");
+					//exit(EXIT_FAILURE);
+				}
+				continue;
+			}
+			// read in the actual function name
+			n = read(newsockfd, buffer, func_name_len);
+			while (n < func_name_len) {
+				printf("Haven't received full function name yet - reading more...\n");
+				n += read(newsockfd, buffer+n, func_name_len - n);
+				printf("Have now received %d bytes in total\n", n);
+			}
+			memcpy(func_name, buffer, MAX_NAME_LEN);
+			func_name[func_name_len] = '\0';
+			printf("Function name: %s\n", func_name);
+			if (dict_find(srv->function_dict, func_name) != NULL) {
+				// let the caller know that the function was found
+				buffer[0] = 'r';
+				buffer[1] = 's';
+				n = write(sockfd, buffer, 2);
+				if (n < 0) {
+					perror("socket");
+					//exit(EXIT_FAILURE);
+				}
+				continue;
+			}
+			else {
+				// let the caller know that the function was not found
+				buffer[0] = 'r';
+				buffer[1] = 'f';
+				n = write(sockfd, buffer, 2);
+				if (n < 0) {
+					perror("socket");
+					//exit(EXIT_FAILURE);
+				}
+				continue;
+			}
+		}
+
+
+
+		// handle call requests
+		else if (!strcmp(buffer[0], 'c')) {
+			int64_t data1;
+
+			
+		}
+
+		// Invalid prefix
+		else {
+			printf("Invalid request received by server: %c\n", buffer[0]);
+		}
+
+
+
+
+
+		// Number of numbers expected
+		while (n < number_of_numbers * 4 + 4) {
+			char nextbuf[256];
+			printf("Haven't received enough numbers yet - reading more...\n");
+			n += read(newsockfd, buffer+n, 256);
+			printf("Have now received %d bytes in total\n", n);
+			//memcpy(buffer+n, nextbuf, n); // doesn't work because n bytes aren't actually being read into nextbuf as n is the TOTAL, 
+										// not the recently read amount of bytes
+			//fprintf(stderr, "Haven't received enough numbers (really?) - "
+							//"Rerun if you are completing 2.2.1\n");
+			//exit(EXIT_FAILURE);
+		}
+		// Calculate sum
+		uint32_t sum = 0;
+		for (int i = 0; i < number_of_numbers; i++) {
+			uint32_t num = ntohl(*(uint32_t*)&buffer[4 + i * 4]);
+			sum += num;
+		}
+
+		// Send result
+		// For convenience, use second buffer...
+		unsigned char buffer2[8] = {0,
 								0,
 								0,
 								1,
@@ -188,12 +291,14 @@ void rpc_serve_all(rpc_server *srv) {
 								(sum & 0xFF0000) >> 16,
 								(sum & 0xFF00) >> 8,
 								sum & 0xFF};
-	printf("Result: %u\n", sum);
-	n = write(newsockfd, buffer2, 8);
-	if (n < 0) {
-		perror("write");
-		exit(EXIT_FAILURE);
-	}
+		printf("Result: %u\n", sum);
+		n = write(newsockfd, buffer2, 8);
+		if (n < 0) {
+			perror("write");
+			exit(EXIT_FAILURE);
+		}
+
+
 		n = read(newsockfd, buffer, 255); // n is number of characters read
 		if (n < 0) {
 			perror("ERROR reading from socket");
@@ -232,8 +337,12 @@ void rpc_serve_all(rpc_server *srv) {
 		}
 	}
 
-	close(sockfd);
+	
 	close(newsockfd);
+
+
+	// close listening socket 
+	//close(sockfd);
 
     // Note that this function will not usually return (i.e. will not reach this line)
     return;
@@ -258,7 +367,7 @@ struct rpc_client {
 struct rpc_handle { // handle into rpc like a file handle that lets the client
                     // invoke a function. Returned by rpc_find and then used by rpc_call
     /* Add variable(s) for handle */
-	char *name;
+	char name[MAX_NAME_LEN + 1];
 	rpc_handler handler;
 
 };
@@ -341,12 +450,16 @@ rpc_client *rpc_init_client(char *addr, int port) {
 
 // At the client, tell the subsystem what details are required to place a call. The return value is a handle
 // struct (not handler) for the remote procedure, which is passed to the rpc_call function.
-// If name is not registered, it should return NULL. If any of the arguments are NULL then NULL
-// should be returned. If the find operation fails, it returns NULL.
+// If name is not registered, it should return NULL. If the find operation fails, it returns NULL.
 rpc_handle *rpc_find(rpc_client *cl, char *name) {
 
     char buffer[256];
     int n;
+
+	// If any of the arguments are NULL then NULL sohuld be returned
+	if (cl == NULL || name == NULL) {
+		return -1;
+	}
 
     // Persistent connection from client to server
 	while (1) {

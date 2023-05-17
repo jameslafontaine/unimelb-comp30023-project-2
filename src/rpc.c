@@ -12,6 +12,9 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 
+#define htonll htobe64
+#define ntohll be64toh
+
 #define BASE_10 10 
 #define MAX_PORT_DIGITS 5
 #define MAX_PORT_NUM 65535
@@ -245,7 +248,9 @@ void rpc_serve_all(rpc_server *srv) {
 		}
 
 
-
+		//************************************************
+		// Supposed to free rpc_data and data 2 after transmitting their contents back to client
+		//************************************************
 		/* Handle call requests*/
 		else if (!strcmp(buffer[0], 'c')) {
 			int64_t data1;
@@ -507,185 +512,207 @@ rpc_client *rpc_init_client(char *addr, int port) {
 // If name is not registered, it should return NULL. If the find operation fails, it returns NULL.
 rpc_handle *rpc_find(rpc_client *cl, char *name) {
 
-    char buffer[256];
+    char buffer[MAX_REQUEST_BYTES];
     int n;
 
-	// If any of the arguments are NULL then NULL sohuld be returned
+	int sockfd = cl->sockfd;
+
+	// If any of the arguments are NULL then NULL should be returned
 	if (cl == NULL || name == NULL) {
 		return -1;
 	}
 
-    // Persistent connection from client to server
-	while (1) {
-		// Numbers to buffer
-	for (int i = 1; i < argc; i++) {
-		uint32_t n = atoi(argv[i]);
-		if (n < 0) {
-			fprintf(stderr, "Bad input\n");
-			exit(EXIT_FAILURE);
-		}
-		uint32_t* val = (uint32_t*)&buffer[(i - 1) * 4];
-		*val = htonl(n);
-	}
+	/* Handle find requests */
 
-	// Number of numbers to be sent, 4 byte prefix
-	uint32_t num_of_numbers = argc - 1;
-	char buffer2[4];
-	uint32_t* buffer2_cast = (uint32_t*)buffer2;
-	*buffer2_cast = htonl(num_of_numbers);
-
-	// Send prefix to server
-	n = write(sockfd, buffer2, 4);
-	if (n < 0) {
+	// Send the prefix to indicate that this is a find request
+	buffer[0] = 'f';
+	if (n = write(sockfd, buffer, 1) < 1) {
 		perror("socket");
-		exit(EXIT_FAILURE);
 	}
-	// sleep(2);
-	// Send buffer
-	n = write(sockfd, buffer, num_of_numbers * 4);
-	if (n < 0) {
+	// Send the length of the provided name
+	uint16_t name_len = (uint16_t) strlen(name);
+	printf("Length of name provided by client: %hu\n", name_len);
+	if (name_len < MIN_NAME_LEN || name_len > MAX_NAME_LEN) {
+		fprintf(stderr, "Invalid name length - please provide a name between 1 and 1000 characters long\n");
+		return NULL;
+	}
+	uint16_t* buffer_cast;
+	*buffer_cast = htons(name_len);
+	if (n = write(sockfd, buffer_cast, 2) < 2) {
 		perror("socket");
-		exit(EXIT_FAILURE);
+		return NULL;
 	}
 
-	// Read message from server
-	n = read(sockfd, buffer, 255);
-	if (n < 0) {
-		perror("read");
-		exit(EXIT_FAILURE);
-	}
-	if (n != 8 || buffer[0] != 0 || buffer[1] != 0 || buffer[2] != 0 ||
-		buffer[3] != 1) {
-		fprintf(stderr, "Bad response from server\n");
-		exit(EXIT_FAILURE);
-	}
-	// Print result
-	uint32_t result = ntohl(*(uint32_t*)&buffer[4]);
-	printf("The result: %u\n", result);
-		// Read message from stdin
-		printf("Please enter the message: ");
-		if (fgets(buffer, 255, stdin) == NULL) {
-			exit(EXIT_SUCCESS);
-		}
-		// Remove \n that was read by fgets
-		buffer[strlen(buffer) - 1] = 0;
-
-		// Send message to server
-		n = write(cl->sockfd, buffer, strlen(buffer));
-		if (n < 0) {
-			perror("socket");
-			exit(EXIT_FAILURE);
-		}
-
-		if (strncmp(buffer, "GOODBYE-CLOSE-TCP", 17) == 0)
-			break;
-
-		// Read message from server
-		n = read(cl->sockfd, buffer, 255);
-		if (n == 0) {
-			break;
-		}
-		if (n < 0) {
-			perror("read");
-			exit(EXIT_FAILURE);
-		}
-		// Null-terminate string
-		buffer[n] = '\0';
-		printf("%s\n", buffer);
+	// Send the actual name to the server
+	strcpy(buffer, name);
+	printf("Name sent from client to server: %s\n", name);
+	if (n = write(sockfd, buffer_cast, name_len) < name_len) {
+		perror("socket");
+		return NULL;
 	}
 
-    return NULL;
+	// Receive response from server
+    n = read(sockfd, buffer, 2);
+	while (n < 2) {
+		printf("Haven't received full response yet - reading more...\n");
+		n += read(sockfd, buffer+n, 1);
+		printf("Have now received %d bytes in total\n", n);
+	}
+	// Return NULL if an error occurred or no function matched the name
+	// Could technically have different if statements for different error codes here to
+	// print descriptive error messages (although there is only one error in the case of find i think)
+	if (buffer[0] == 'e' || buffer[1] == 'f')
+		return NULL;
+    else if (buffer[0] == 'r' && buffer[1] == 's') {
+		rpc_handle* handle = malloc(sizeof(rpc_handle));
+		strcpy(handle->name, name);
+		return handle;
+	}
+
+	return NULL;
 }
 
 // This function causes the subsystem to run the remote procedure, and returns the value.
 // If the call fails, it returns NULL. NULL should be returned if any of the arguments are NULL. If
-// this returns a non-NULL value, then it should dynamically alocate (by malloc) both the rpc_data structure
+// this returns a non-NULL value, then it should dynamically allocate (by malloc) both the rpc_data structure
 // and its data2 field. The client will free these by rpc_data_free (defined below)
 rpc_data *rpc_call(rpc_client *cl, rpc_handle *h, rpc_data *payload) {
 
-    char buffer[256];
+	// SHOULD CHECK THAT THE CLIENT IS NOT SENDING AN INVALID RPC_DATA
+
+	// SERVER SHOULD CHECK THAT THE HANDLER ISN'T RETURNING AN INVALID RPC_DATA
+	
+    char buffer[MAX_DATA2_BYTES];
     int n;
 
-    // Persistent connection from client to server
-	while (1) {
-		// Numbers to buffer
-	for (int i = 1; i < argc; i++) {
-		uint32_t n = atoi(argv[i]);
-		if (n < 0) {
-			fprintf(stderr, "Bad input\n");
-			exit(EXIT_FAILURE);
-		}
-		uint32_t* val = (uint32_t*)&buffer[(i - 1) * 4];
-		*val = htonl(n);
+	int sockfd = cl->sockfd;
+
+	// If any of the arguments are NULL then NULL should be returned
+	if (cl == NULL || h == NULL || payload == NULL || h->name == NULL) {
+		return NULL;
 	}
 
-	// Number of numbers to be sent, 4 byte prefix
-	uint32_t num_of_numbers = argc - 1;
-	char buffer2[4];
-	uint32_t* buffer2_cast = (uint32_t*)buffer2;
-	*buffer2_cast = htonl(num_of_numbers);
-
-	// Send prefix to server
-	n = write(cl->sockfd, buffer2, 4);
-	if (n < 0) {
+	// Send the prefix to indicate that this is a call request
+	buffer[0] = 'c';
+	if (n = write(sockfd, buffer, 1) < 1) {
 		perror("socket");
-		exit(EXIT_FAILURE);
 	}
-	// sleep(2);
-	// Send buffer
-	n = write(cl->sockfd, buffer, num_of_numbers * 4);
-	if (n < 0) {
+	// Send the length of the provided name
+	uint16_t name_len = (uint16_t) strlen(h->name);
+	printf("Length of name provided by client: %hu\n", name_len);
+	if (name_len < MIN_NAME_LEN || name_len > MAX_NAME_LEN) {
+		fprintf(stderr, "Invalid name length - please provide a name between 1 and 1000 characters long\n");
+		return NULL;
+	}
+	uint16_t* buffer_cast;
+	*buffer_cast = htons(name_len);
+	if (n = write(sockfd, buffer_cast, 2) < 2) {
 		perror("socket");
-		exit(EXIT_FAILURE);
+		return NULL;
 	}
 
-	// Read message from server
-	n = read(sockfd, buffer, 255);
-	if (n < 0) {
-		perror("read");
-		exit(EXIT_FAILURE);
+	// Send the actual name to the server
+	strcpy(buffer, h->name);
+	printf("Name sent from client to server: %s\n", h->name);
+	if (n = write(sockfd, buffer_cast, name_len) < name_len) {
+		perror("socket");
+		return NULL;
 	}
-	if (n != 8 || buffer[0] != 0 || buffer[1] != 0 || buffer[2] != 0 ||
-		buffer[3] != 1) {
-		fprintf(stderr, "Bad response from server\n");
-		exit(EXIT_FAILURE);
+
+	// Send data 1 to the server
+	int64_t data_1 = (int64_t) payload->data1;  
+	printf("Data 1 provided by client: %lld \n", data_1);
+	int64_t* buffer_cast;
+	*buffer_cast = htonll(data_1);
+	if (n = write(sockfd, buffer_cast, 8) < 8) {
+		perror("socket");
+		return NULL;
 	}
-	// Print result
-	uint32_t result = ntohl(*(uint32_t*)&buffer[4]);
-	printf("The result: %u\n", result);
-		// Read message from stdin
-		printf("Please enter the message: ");
-		if (fgets(buffer, 255, stdin) == NULL) {
-			exit(EXIT_SUCCESS);
+
+	// Check if data 2 exists and send the prefix indicating such
+	int data2_len = payload->data2_len;
+	void* data2 = payload->data2;
+	if (data2_len > MAX_DATA2_BYTES) {
+		fprintf(stderr, "Overlength error\n");
+		return NULL;
+	}
+	else if (data2_len == 0 || data2 == NULL) {
+		buffer[0] = 'n';
+		if (n = write(sockfd, buffer, 1) < 1) {
+			perror("socket");
+			return NULL;
 		}
-		// Remove \n that was read by fgets
-		buffer[strlen(buffer) - 1] = 0;
 
-		// Send message to server
-		n = write(cl->sockfd, buffer, strlen(buffer));
+		// Receive response from server without data 2
+		n = read(sockfd, buffer, MAX_DATA1_BYTES);
 		if (n < 0) {
 			perror("socket");
-			exit(EXIT_FAILURE);
+			return NULL;
 		}
-
-		if (strncmp(buffer, "GOODBYE-CLOSE-TCP", 17) == 0)
-			break;
-
-		// Read message from server
-		n = read(cl->sockfd, buffer, 255);
-		if (n == 0) {
-			break;
+		while (n < MAX_DATA1_BYTES) {
+			printf("Haven't received all of data 1 yet - reading more...\n");
+			n += read(sockfd, buffer+n, 1);
+			printf("Have now received %d bytes in total\n", n);
+		}
+		int64_t data1_result = ntohll(*(int64_t *)&buffer);
+		rpc_data* results = malloc(sizeof(rpc_data));
+		results->data1 = data1_result;
+		results->data2_len = 0;
+		results->data2 = NULL;
+		return results;
+	}
+	else {
+		// Send data 2 to the server if it exists
+		buffer[0] = 'y';
+		if (n = write(sockfd, buffer, 1) < 1) {
+			perror("socket");
 		}
 		if (n < 0) {
-			perror("read");
-			exit(EXIT_FAILURE);
+			perror("socket");
+			return NULL;
 		}
-		// Null-terminate string
-		buffer[n] = '\0';
-		printf("%s\n", buffer);
+		if (n = write(sockfd, data2, MAX_DATA2_BYTES) < MAX_DATA2_BYTES) {
+			perror("socket");
+		}
+		if (n < 0) {
+			perror("socket");
+			return NULL;
+		}
+
+
+		
+		// Receive response from server including data 2
+		n = read(sockfd, buffer, MAX_DATA1_BYTES);
+		if (n < 0) {
+			perror("socket");
+			return NULL;
+		}
+		while (n < MAX_DATA1_BYTES) {
+			printf("Haven't received all of data 1 yet - reading more...\n");
+			n += read(sockfd, buffer+n, 1);
+			printf("Have now received %d bytes in total\n", n);
+		}
+		int64_t data1_result = ntohll(*(int64_t *)&buffer);
+		rpc_data* results = malloc(sizeof(rpc_data));
+		results->data1 = data1_result;
+
+		n = read(sockfd, buffer, MAX_DATA2_BYTES);
+		if (n < 0) {
+			perror("socket");
+			return NULL;
+		}
+		while (n < MAX_DATA2_BYTES) {
+			printf("Haven't received all of data 2 yet - reading more...\n");
+			n += read(sockfd, buffer+n, 1);
+			printf("Have now received %d bytes in total\n", n);
+		}
+		results->data2_len = sizeof(buffer);
+		results->data2 = malloc(sizeof(buffer));
+		results->data2 = buffer;
+		return results;
 	}
 
-    return NULL;
+	return NULL;
 }
 
 // Called after the final rpc_call or rpc_find (i.e. final use of RPC system by client)

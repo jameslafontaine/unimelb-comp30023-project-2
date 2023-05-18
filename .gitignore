@@ -6,3 +6,7 @@ debug/
 *.a
 *.txt
 transfer_utils.c
+skel-client
+skel-server
+new-client
+new-server

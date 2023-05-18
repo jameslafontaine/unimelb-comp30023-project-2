@@ -33,7 +33,7 @@ void dict_add(dict_ptr dict, const char *key, void *element) {
        dict->cap *= 2;
        dict->entry = realloc(dict->entry, dict->cap * sizeof(dict_entry));
    }
-   strcpy(dict->entry[dict->len].key, key);
+   dict->entry[dict->len].key = key;
    dict->entry[dict->len].element = element;
    dict->len++;
    return;
@@ -47,9 +47,9 @@ dict_ptr dict_new(void) {
 }
 
 void dict_free(dict_ptr dict) {
-    for (int i = 0; i < dict->len; i++) {
-        free(dict->entry[i].key);
-    }
+    //for (int i = 0; i < dict->len; i++) {
+    //    free(dict->entry[i].key);
+    //}
     free(dict->entry);
     free(dict);
 }

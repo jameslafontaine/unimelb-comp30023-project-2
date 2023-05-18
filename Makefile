@@ -1,38 +1,57 @@
 CC=cc
+CFLAGS=-Wall -g 
 RPC_SYSTEM=rpc.o
+RPC_SYSTEM_A=rpc.a
+SKEL_SERVER_A=skel_server.a
+SKEL_CLIENT_A=skel_client.a
+SKEL_SERVER_EXE=skel-server
+SKEL_CLIENT_EXE=skel-client
 
-.PHONY: format all
+NEW_SERVER_EXE=new-server
 
-all: $(RPC_SYSTEM)
+NEW_CLIENT_EXE=new-client
+#LDFLAGS         any linker flags required
 
-$(RPC_SYSTEM): rpc.c rpc.h
-	$(CC) -c -o $@ $<
+.PHONY: format all clean
 
-# RPC_SYSTEM_A=rpc.a
-# $(RPC_SYSTEM_A): rpc.o
-# 	ar rcs $(RPC_SYSTEM_A) $(RPC_SYSTEM)
+skel-test: $(SKEL_SERVER_EXE) $(SKEL_CLIENT_EXE)
+
+$(RPC_SYSTEM_A): rpc.o dict.o
+	ar rcs $@ $^
+
+$(SKEL_SERVER_A): skel_server.o
+	ar rcs $@ $^
+
+$(SKEL_CLIENT_A): skel_client.o
+	ar rcs $@ $^	
+	
+$(SKEL_SERVER_EXE): skel_server.a rpc.a
+	cc -o $@ $^ $(CFLAGS)
+
+$(SKEL_CLIENT_EXE): skel_client.a rpc.a
+	cc -o $@ $^ $(CFLAGS)
+
+$(NEW_SERVER_EXE): src/new_server.a rpc.a
+	cc -o $@ $^ $(CFLAGS)
+
+$(NEW_CLIENT_EXE): src/new_client.a  rpc.a
+	cc -o $@ $^ $(CFLAGS)
+
+skel_client.o: src/skel_client.c
+	$(CC) -c -o $@ $< $(CFLAGS)
+
+skel_server.o: src/skel_server.c
+	$(CC) -c -o $@ $< $(CFLAGS)
+
+
+#$(RPC_SYSTEM): rpc.c rpc.h
+#	$(CC) $(CFLAGS) -c -o $@ $<
+
+%.o: src/%.c src/%.h
+	$(CC) -c -o $@ $< $(CFLAGS)
 
 format:
 	clang-format -style=file -i *.c *.h
 
-CC=gcc
-CFLAGS=-Wall -g 
-EXE=allocate
-
-all: $(EXE)
-
-$(EXE): src/main.c src/$(PROC_MAN_O) src/$(T4_O) src/$(INPUT_O) src/$(OUTPUT_O) src/$(PUTILS_O) src/$(DLL_O) 
-	$(CC) $(CFLAGS) -o $(EXE) $^ -lm
-
-#gcc -o server server.a rpc.a
-
-#gcc -o client client.a rpc.a
-
-%.o: %.c %.h
-	$(CC) -c -o $@ $< $(CFLAGS)
-
 clean:
-	rm -f *.o src/*.o debug/*.o $(EXE) $(EXE_DEBUG)
-
-format:
-	clang-format -i *.c *.h
+	rm -f *.a *.o src/*.o debug/*.o *.o src/*.o debug/*.o $(EXE) $(EXE_DEBUG)

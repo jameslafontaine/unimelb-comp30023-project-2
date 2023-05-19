@@ -61,9 +61,38 @@ int send_rpc_data(int sockfd, rpc_data* payload);
 
 void send_find_response(int sockfd, const char status);
 
+int read_nbytes(int sockfd, char* buffer, int n);
+
+int write_nbytes(int sockfd, char* buffer, int n);
 
 
+// Reads n bytes from the provided descriptor into the provided buffer, returns -1
+// if unsuccessful in reading n bytes, returns 0 if successful
+int read_nbytes(int sockfd, char* buffer, int n) {
+	int amount, more;
+	while ((amount = read(sockfd, buffer, n)) < n) {
+		more = read(sockfd, buffer+amount, 1);
+		if (more < 1) {
+			return -1;
+		}
+		amount += more;
+	}
+	return 0;
+}
 
+// Writes n bytes to the provided descriptor from the provided buffer, returns -1
+// if unsuccessful in writing n bytes, returns 0 if successful
+int write_nbytes(int sockfd, char* buffer, int n) {
+	int amount, more;
+	while ((amount = write(sockfd, buffer, n)) < n) {
+		more = write(sockfd, buffer+amount, 1);
+		if (more < 1) {
+			return -1;
+		}
+		amount += more;
+	}
+	return 0;
+}
 
 int receive_function(int sockfd, char func_name[MAX_NAME_LEN + 1]) {
 	char buffer[MAX_NAME_LEN+1];
@@ -180,7 +209,7 @@ rpc_data* receive_rpc_data(int sockfd) {
 
 	memset(buffer, 0, MAX_DATA2_BYTES);
 
-	printf("Reading in data 1...\n");
+	//printf("Reading in data 1...\n");
 	while ((n = read(sockfd, buffer, DATA1_SIZE)) < DATA1_SIZE) {
 		m = read(sockfd, buffer+n, 1);
 		if (m < 1) {
@@ -193,7 +222,25 @@ rpc_data* receive_rpc_data(int sockfd) {
 	rpc_data* recv = malloc(sizeof(rpc_data));
 	recv->data1 = data1;
 
-	printf("Reading in data 2 length...\n");
+	//printf("Reading in data 2 length...\n");
+
+	// Check if data 2 was malformed
+	while ((n = read(sockfd, buffer, 1)) < 1) {
+		m = read(sockfd, buffer+n, 1);
+		if (m < 1) {
+			return NULL;
+		}
+		n += m;
+	}
+
+	if (buffer[0] == 'm') {
+		fprintf(stderr, "Malformed input indicated by sender\n");
+		return NULL;
+	} 
+	else if (buffer[0] != 'v') {
+		fprintf(stderr, "Invalid malformity indicator received\n");
+	}
+
 	// Read in data2_len
 	while ((n = read(sockfd, buffer, DATA2_LEN_SIZE)) < DATA2_LEN_SIZE) {
 		m = read(sockfd, buffer+n, 1);
@@ -203,10 +250,11 @@ rpc_data* receive_rpc_data(int sockfd) {
 		n += m;
 	}
 	uint64_t data2_len = ntohll(*(uint64_t *)&buffer);
+	//printf("Data 2 length received: %ld\n", data2_len);
 
 	// Read in data2 if data2_len > 0
 	if (data2_len > 0) {
-		printf("Reading in data 2...\n");
+		//printf("Reading in data 2...\n");
 		memset(buffer, 0, MAX_DATA2_BYTES);
 		while ((n = read(sockfd, buffer, data2_len)) < data2_len) {
 			m = read(sockfd, buffer+n, 1);
@@ -234,6 +282,7 @@ rpc_data* receive_rpc_data(int sockfd) {
  
 int send_rpc_data(int sockfd, rpc_data* payload) {
 
+	char buffer[MAX_DATA2_BYTES];
 	int n, m;
 
 	// Check if payload is null
@@ -241,7 +290,7 @@ int send_rpc_data(int sockfd, rpc_data* payload) {
 		return -1;
 	}
 
-	printf("Sending data 1...\n");
+	//printf("Sending data 1...\n");
 	// Send data 1 to the server
 	int64_t data1 = (int64_t) payload->data1;  
 	
@@ -257,20 +306,27 @@ int send_rpc_data(int sockfd, rpc_data* payload) {
 	uint64_t data2_len = (uint64_t) payload->data2_len;
 	void* data2 = payload->data2;
 
-	printf("Checking data 2 validity...\n");
+	//printf("Checking data 2 validity...\n");
 	// Check validity of data2
 	if (data2_len > MAX_DATA2_BYTES) {
 		fprintf(stderr, "Overlength error\n");
+		buffer[0] = 'm';
+		write_nbytes(sockfd, buffer, 1);
 		return -1;
 	}
 	else if ((data2_len == 0 && data2 != NULL) || (data2_len != 0 && data2 == NULL)) {
 		fprintf(stderr, "Malformed input - data 2 and data2_len don't match\n");
+		buffer[0] = 'm';
+		write_nbytes(sockfd, buffer, 1);
 		return -1;
 	}
 
+	buffer[0] = 'v';
+	write_nbytes(sockfd, buffer, 1);
+
 	// Send data 2 length
 
-	printf("Sending data 2 length...\n");
+	//printf("Sending data 2 length...\n");
 	uint64_t* buffer_cast2 = (uint64_t *) malloc(sizeof(uint64_t));
 	*buffer_cast2 = htonll(data2_len);
 	if ((n = write(sockfd, buffer_cast2, DATA2_LEN_SIZE)) < DATA2_LEN_SIZE) {
@@ -282,7 +338,7 @@ int send_rpc_data(int sockfd, rpc_data* payload) {
 	// Send data 2 if data2 len > 0
 	if (data2_len > 0) {
 
-		printf("Sending data 2...\n");
+		//printf("Sending data 2...\n");
 		// Send data 2
 		while ((n = write(sockfd, data2, data2_len)) < data2_len) {
 			m = write(sockfd, data2+n, 1);

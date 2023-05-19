@@ -245,6 +245,11 @@ int send_rpc_data(int sockfd, rpc_data* payload) {
 
 	int n;
 
+	// Check if payload is null
+	if (payload == NULL) {
+		return -1;
+	}
+
 	// Send data 1 to the server
 	int64_t data1 = (int64_t) payload->data1;  
 	

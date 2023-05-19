@@ -5,8 +5,9 @@ src-proj1/
 skel_client.c
 skel_server.c
 *.a
-*.txt
+todo.txt
 transfer_utils.c
+transfer_utils.h
 skel-client
 skel-server
 test-client

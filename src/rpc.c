@@ -13,6 +13,7 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <endian.h>
+#include <pthread.h>
 
 #define htonll htobe64
 #define ntohll be64toh
@@ -47,6 +48,15 @@
 
 #define RESP_MSG_SIZE 100100
 
+#define NONBLOCKING
+
+typedef struct {
+    rpc_server* srv;
+    int newsockfd;
+    pthread_t pid;
+
+} thread_args;
+
 int create_listening_socket(char* service);
 
 int send_error_code(int sockfd, char error_code);
@@ -64,6 +74,8 @@ void send_find_response(int sockfd, const char status);
 int read_nbytes(int sockfd, char* buffer, int n);
 
 int write_nbytes(int sockfd, char* buffer, int n);
+
+void* serve_client(void* args);
 
 
 // Reads n bytes from the provided descriptor into the provided buffer, returns -1
@@ -219,8 +231,8 @@ rpc_data* receive_rpc_data(int sockfd) {
 	}
 	
 	int64_t data1 = ntohll(*(int64_t *)&buffer);
-	rpc_data* recv = malloc(sizeof(rpc_data));
-	recv->data1 = data1;
+	rpc_data* payload = malloc(sizeof(rpc_data));
+	payload->data1 = data1;
 
 	//printf("Reading in data 2 length...\n");
 
@@ -264,16 +276,16 @@ rpc_data* receive_rpc_data(int sockfd) {
 			n += m;
 		}
 
-		recv->data2_len = data2_len;
-		recv->data2 = malloc(data2_len);
-		memcpy(recv->data2, buffer, data2_len);
-		return recv;
+		payload->data2_len = data2_len;
+		payload->data2 = malloc(data2_len);
+		memcpy(payload->data2, buffer, data2_len);
+		return payload;
 	}
-	// otherwise set data2_len to 0 and data2 to null and return recv
+	// otherwise set data2_len to 0 and data2 to null and return payload
 	else if (data2_len == 0) {
-		recv->data2_len = 0;
-		recv->data2 = NULL;
-		return recv;
+		payload->data2_len = 0;
+		payload->data2 = NULL;
+		return payload;
 	}
 	return NULL;
 }
@@ -457,38 +469,28 @@ void rpc_serve_all(rpc_server *srv) {
     }
 
     //char* port = srv->port;
-	int n;
-    int sockfd = srv->listen_sockfd;
     int newsockfd;
-	char buffer[MAX_REQUEST_BYTES];//, ip[INET6_ADDRSTRLEN];
+    int sockfd = srv->listen_sockfd;
+
 	struct sockaddr_in client_addr;
 	socklen_t client_addr_size;
-
-	char func_name[MAX_NAME_LEN + 1];
-
-	/*
-	// Accept a connection - blocks until a connection is ready to be accepted
-	// Get back a new file descriptor to communicate on
-	client_addr_size = sizeof client_addr;
-	newsockfd =
-		accept(sockfd, (struct sockaddr*)&client_addr, &client_addr_size);
-	if (newsockfd < 0) {
-		perror("accept");
-		//exit(EXIT_FAILURE);
-	}
-	*/
 	
-	// Read characters from the connection, then process
+	// Indefinitely serve clients
 	while (1) {
-
-
+        
+        printf("Listening for connections...\n");
 		// Listen on socket - means we're ready to accept connections,
 		// incoming connection requests will be queued, man 3 listen
 		if (listen(sockfd, 10) < 0) {
 			perror("listen");
 			//exit(EXIT_FAILURE);
 		}
-
+        // -----------------------------------------------------------
+        // Maybe once 10 connections are established, join all threads
+        // -----------------------------------------------------------
+		// Spawn a new thread when a connection is accepted 
+		
+        printf("Accepting connection...\n");
 		// Accept a connection - blocks until a connection is ready to be accepted
 		// Get back a new file descriptor to communicate on
 		client_addr_size = sizeof client_addr;
@@ -498,120 +500,26 @@ void rpc_serve_all(rpc_server *srv) {
 			perror("accept");
 			//exit(EXIT_FAILURE);
 		}
-		
-		memset(buffer, 0, sizeof(buffer));
-		while ((n = read(newsockfd, buffer, 1)) > 0) {
-			// n is number of characters read / written
+        
+        thread_args* args = (thread_args *) malloc(sizeof(thread_args));
+        args->srv = srv;
+        args->newsockfd = newsockfd;
+        #ifdef NONBLOCKING
+          if (pthread_create(&(args->pid), NULL, serve_client, (void *) args) != 0) {
+            perror("pthread_create() error");   // pthread_create() returns 1 if error creating thread
+            exit(1);
+        }
 
-			/* -------------------- */
-			/* Ignore test messages */
-			/* -------------------  */
-			if (buffer[0] == 't') {
-				continue;
-			}
-			/* -------------------- */
-			/* Handle find requests */
-			/* -------------------  */
+        //if (pthread_join(args->pid, NULL)) {
+		//    printf("Error joining thread\n");  // pthread_join() returns 1 if error joining thread
+		//    exit(1);
+	    //}
+        #endif
 
-			if (buffer[0] == 'f') {
-				
-				// read in function length prefix and function name
-				if (receive_function(newsockfd, func_name) != 0) {
-					perror("socket");
-					send_error_code(newsockfd, ERRCODE_SOCKET);
-					continue;
-				}
-
-				if (dict_find(srv->function_dict, func_name) != NULL) {
-					// let the caller know that the function was found
-					send_find_response(newsockfd, 's');
-					//sleep(2);
-					continue;
-				}
-				else {
-					// let the caller know that the function was not found
-					send_find_response(newsockfd, 'f');
-					//sleep(2);
-					continue;
-				}
-			}
-
-
-			/* -------------------- */
-			/* Handle call requests */
-			/* -------------------- */
-
-			else if (buffer[0] == 'c') {
-
-				if (receive_function(newsockfd, func_name) != 0) {
-					perror("socket");
-					send_error_code(newsockfd, ERRCODE_SOCKET);
-					continue;
-				}
-
-				rpc_handler procedure = (rpc_handler) dict_find(srv->function_dict, func_name);
-				if (procedure != NULL) {
-					rpc_data* in = NULL;
-					
-					if ((in = receive_rpc_data(newsockfd)) == NULL) {
-						continue;
-					}
-
-					// Call the procedure
-					rpc_data* out = procedure(in);
-					rpc_data_free(in);
-
-					// Check that NULL wasn't returned
-					if (out == NULL) {
-						fprintf(stderr, "NULL response received from procedure at server\n");
-						send_error_code(newsockfd, ERRCODE_NULL_RESULT);
-						continue;
-					}
-					else {
-						// Check validity of data2 returned by procedure
-						if (out->data2_len > MAX_DATA2_BYTES) {
-							fprintf(stderr, "Overlength error\n");
-							send_error_code(newsockfd, ERRCODE_DATA2_LEN);
-							continue;
-						}
-						else if ((out->data2_len == 0 && out->data2 != NULL) || (out->data2_len != 0 && out->data2 == NULL)) {
-							fprintf(stderr, "Malformed input - data 2 and data2_len don't match at server\n");
-							send_error_code(newsockfd, ERRCODE_DATA2_MALFORMED);
-							continue;
-						}	
-
-						/* Send the recv back to the client */
-
-						// Send response prefix
-						buffer[0] = 'r';
-						n = write(newsockfd, buffer, 1);
-						if (n < 0) {
-							perror("socket");
-							//exit(EXIT_FAILURE);
-						}
-						send_rpc_data(newsockfd, out);
-						rpc_data_free(out);
-						//sleep(2);
-
-						continue;
-					}	
-				}
-				else {
-					// let the client know that the function was not found
-					send_error_code(newsockfd, ERRCODE_PROC_NOTFOUND);
-					continue;
-				}
-			}
-
-			// Invalid prefix
-			else {
-				printf("Invalid request received by server: %c\n", buffer[0]);
-				send_error_code(newsockfd, ERRCODE_MSG_PREFIX);
-				continue;
-			}
-		}
+        #ifndef NONBLOCKING
+        serve_client(args);
+        #endif
 	}
-
 	// close listening socket 
 	//close(sockfd);
 
@@ -927,4 +835,129 @@ int create_listening_socket(char* service) {
 	freeaddrinfo(res);
 
 	return sockfd;
+}
+
+void* serve_client(void* args) {
+    int n;
+	char buffer[MAX_REQUEST_BYTES];
+    char func_name[MAX_NAME_LEN + 1];
+    memset(buffer, 0, sizeof(buffer));
+
+    int newsockfd = ((thread_args *)args)->newsockfd;
+    rpc_server* srv = ((thread_args *)args)->srv;
+
+    while ((n = read(newsockfd, buffer, 1)) > 0) {
+        // n is number of characters read / written
+
+        /* -------------------- */
+        /* Ignore test messages */
+        /* -------------------  */
+        if (buffer[0] == 't') {
+            continue;
+        }
+        /* -------------------- */
+        /* Handle find requests */
+        /* -------------------  */
+
+        if (buffer[0] == 'f') {
+            
+            // read in function length prefix and function name
+            if (receive_function(newsockfd, func_name) != 0) {
+                perror("socket");
+                send_error_code(newsockfd, ERRCODE_SOCKET);
+                continue;
+            }
+
+            if (dict_find(srv->function_dict, func_name) != NULL) {
+                // let the caller know that the function was found
+                send_find_response(newsockfd, 's');
+                //sleep(2);
+                continue;
+            }
+            else {
+                // let the caller know that the function was not found
+                send_find_response(newsockfd, 'f');
+                //sleep(2);
+                continue;
+            }
+        }
+
+
+        /* -------------------- */
+        /* Handle call requests */
+        /* -------------------- */
+
+        else if (buffer[0] == 'c') {
+
+            if (receive_function(newsockfd, func_name) != 0) {
+                perror("socket");
+                send_error_code(newsockfd, ERRCODE_SOCKET);
+                continue;
+            }
+
+            rpc_handler procedure = (rpc_handler) dict_find(srv->function_dict, func_name);
+            if (procedure != NULL) {
+                rpc_data* in = NULL;
+                
+                if ((in = receive_rpc_data(newsockfd)) == NULL) {
+                    continue;
+                }
+
+                // Call the procedure
+                rpc_data* out = procedure(in);
+                rpc_data_free(in);
+
+                // Check that NULL wasn't returned
+                if (out == NULL) {
+                    fprintf(stderr, "NULL response received from procedure at server\n");
+                    send_error_code(newsockfd, ERRCODE_NULL_RESULT);
+                    continue;
+                }
+                else {
+                    // Check validity of data2 returned by procedure
+                    if (out->data2_len > MAX_DATA2_BYTES) {
+                        fprintf(stderr, "Overlength error\n");
+                        send_error_code(newsockfd, ERRCODE_DATA2_LEN);
+                        continue;
+                    }
+                    else if ((out->data2_len == 0 && out->data2 != NULL) || (out->data2_len != 0 && out->data2 == NULL)) {
+                        fprintf(stderr, "Malformed input - data 2 and data2_len don't match at server\n");
+                        send_error_code(newsockfd, ERRCODE_DATA2_MALFORMED);
+                        continue;
+                    }	
+
+                    /* Send the results back to the client */
+
+                    // Send response prefix
+                    buffer[0] = 'r';
+                    n = write(newsockfd, buffer, 1);
+                    if (n < 0) {
+                        perror("socket");
+                        //exit(EXIT_FAILURE);
+                    }
+                    send_rpc_data(newsockfd, out);
+                    rpc_data_free(out);
+                    //sleep(2);
+
+                    continue;
+                }	
+            }
+            else {
+                // let the client know that the function was not found
+                send_error_code(newsockfd, ERRCODE_PROC_NOTFOUND);
+                continue;
+            }
+        }
+
+        // Invalid prefix
+        else {
+            printf("Invalid request received by server: %c\n", buffer[0]);
+            send_error_code(newsockfd, ERRCODE_MSG_PREFIX);
+            continue;
+        }
+    }
+    pthread_detach(((thread_args *)args)->pid);
+    free(args);
+
+    return NULL;
 }

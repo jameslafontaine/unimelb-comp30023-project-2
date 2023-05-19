@@ -14,7 +14,7 @@ SKEL_CLIENT_A=skel_client.a
 SKEL_SERVER_EXE=skel-server
 SKEL_CLIENT_EXE=skel-client
 
-#LDFLAGS         any linker flags required
+LDFLAGS=-lpthread         # any linker flags required
 
 .PHONY: format all clean
 
@@ -34,10 +34,10 @@ test-systems: $(TEST_SERVER_EXE) $(TEST_CLIENT_EXE)
 test-debug: $(TEST_SERVER_DEBUG) $(TEST_CLIENT_DEBUG)
 
 $(TEST_SERVER_EXE): src/test_server.a rpc.a
-	cc -o $@ $^ $(CFLAGS)
+	cc -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 $(TEST_CLIENT_EXE): src/test_client.a  rpc.a
-	cc -o $@ $^ $(CFLAGS)
+	cc -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 $(TEST_SERVER_DEBUG): debug/test_server.a debug/rpc.a
 	cc -o $@ $^ $(CFLAGS)

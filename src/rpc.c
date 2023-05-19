@@ -478,7 +478,7 @@ void rpc_serve_all(rpc_server *srv) {
 	// Indefinitely serve clients
 	while (1) {
         
-        printf("Listening for connections...\n");
+        //printf("Listening for connections...\n");
 		// Listen on socket - means we're ready to accept connections,
 		// incoming connection requests will be queued, man 3 listen
 		if (listen(sockfd, 10) < 0) {
@@ -490,7 +490,7 @@ void rpc_serve_all(rpc_server *srv) {
         // -----------------------------------------------------------
 		// Spawn a new thread when a connection is accepted 
 		
-        printf("Accepting connection...\n");
+        //printf("Accepting connection...\n");
 		// Accept a connection - blocks until a connection is ready to be accepted
 		// Get back a new file descriptor to communicate on
 		client_addr_size = sizeof client_addr;

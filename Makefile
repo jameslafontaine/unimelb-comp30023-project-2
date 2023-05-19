@@ -2,39 +2,65 @@ CC=cc
 CFLAGS=-Wall -g 
 RPC_SYSTEM=rpc.o
 RPC_SYSTEM_A=rpc.a
+RPC_SYSTEM_A_DEBUG=debug/rpc.a
+
+TEST_SERVER_EXE=test-server
+TEST_CLIENT_EXE=test-client
+TEST_SERVER_DEBUG=test-server-debug
+TEST_CLIENT_DEBUG=test-client-debug
+
 SKEL_SERVER_A=skel_server.a
 SKEL_CLIENT_A=skel_client.a
 SKEL_SERVER_EXE=skel-server
 SKEL_CLIENT_EXE=skel-client
 
-NEW_SERVER_EXE=new-server
-
-NEW_CLIENT_EXE=new-client
 #LDFLAGS         any linker flags required
 
 .PHONY: format all clean
 
+$(RPC_SYSTEM_A): src/rpc.o src/dict.o
+	ar rcs $@ $^
+
+$(RPC_SYSTEM_A_DEBUG): debug/rpc.o debug/dict.o
+	ar rcs $@ $^
+
+
+# --------------------------------------------------
+# TEST SERVER AND CLIENT
+# --------------------------------------------------
+
+test-systems: $(TEST_SERVER_EXE) $(TEST_CLIENT_EXE)
+
+test-debug: $(TEST_SERVER_DEBUG) $(TEST_CLIENT_DEBUG)
+
+$(TEST_SERVER_EXE): src/test_server.a rpc.a
+	cc -o $@ $^ $(CFLAGS)
+
+$(TEST_CLIENT_EXE): src/test_client.a  rpc.a
+	cc -o $@ $^ $(CFLAGS)
+
+$(TEST_SERVER_DEBUG): debug/test_server.a debug/rpc.a
+	cc -o $@ $^ $(CFLAGS)
+
+$(TEST_CLIENT_DEBUG): debug/test_client.a debug/rpc.a
+	cc -o $@ $^ $(CFLAGS)
+
+# --------------------------------------------------
+# SKELETON SERVER AND CLIENT
+# --------------------------------------------------
+
 skel-test: $(SKEL_SERVER_EXE) $(SKEL_CLIENT_EXE)
 
-$(RPC_SYSTEM_A): rpc.o dict.o
+$(SKEL_SERVER_A): src/skel_server.o
 	ar rcs $@ $^
 
-$(SKEL_SERVER_A): skel_server.o
-	ar rcs $@ $^
-
-$(SKEL_CLIENT_A): skel_client.o
+$(SKEL_CLIENT_A): src/skel_client.o
 	ar rcs $@ $^	
 	
 $(SKEL_SERVER_EXE): skel_server.a rpc.a
 	cc -o $@ $^ $(CFLAGS)
 
 $(SKEL_CLIENT_EXE): skel_client.a rpc.a
-	cc -o $@ $^ $(CFLAGS)
-
-$(NEW_SERVER_EXE): src/new_server.a rpc.a
-	cc -o $@ $^ $(CFLAGS)
-
-$(NEW_CLIENT_EXE): src/new_client.a  rpc.a
 	cc -o $@ $^ $(CFLAGS)
 
 skel_client.o: src/skel_client.c
@@ -44,14 +70,15 @@ skel_server.o: src/skel_server.c
 	$(CC) -c -o $@ $< $(CFLAGS)
 
 
-#$(RPC_SYSTEM): rpc.c rpc.h
-#	$(CC) $(CFLAGS) -c -o $@ $<
+debug/%.o: debug/%.c debug/%.h
+	$(CC) -c -o $@ $< $(CFLAGS)
 
-%.o: src/%.c src/%.h
+src/%.o: src/%.c src/%.h
 	$(CC) -c -o $@ $< $(CFLAGS)
 
 format:
 	clang-format -style=file -i *.c *.h
 
 clean:
-	rm -f *.a *.o src/*.o debug/*.o *.o src/*.o debug/*.o $(EXE) $(EXE_DEBUG)
+	rm -f *.a *.o src/*.o debug/*.o *.o src/*.o debug/*.o $(SKEL_SERVER_EXE) $(SKEL_CLIENT_EXE) $(TEST_CLIENT_EXE) $(TEST_SERVER_EXE) $(TEST_CLIENT_DEBUG) $(TEST_SERVER_DEBUG)
+

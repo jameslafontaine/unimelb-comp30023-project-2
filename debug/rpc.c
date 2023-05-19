@@ -77,6 +77,7 @@ int receive_function(int sockfd, char func_name[MAX_NAME_LEN + 1]) {
 		printf("Have now received %d bytes in total\n", n);
 	}
 	uint16_t func_name_len = ntohs(*(uint16_t*)&buffer);
+	printf("Function name length received: %hu\n", func_name_len);
 	// should probably move this check to rpc_find but doesn't hurt to have it here as well
 	// if it doesn't mess anything up (except for the fact that it is clogging up the code)
 	if (func_name_len < MIN_NAME_LEN || func_name_len > MAX_NAME_LEN) {
@@ -92,7 +93,14 @@ int receive_function(int sockfd, char func_name[MAX_NAME_LEN + 1]) {
 		n += read(sockfd, buffer+n, func_name_len - n);
 		printf("Have now received %d bytes in total\n", n);
 	}
+	//printf("%c\n", buffer[0]);
+	//printf("%c\n", buffer[1]);
+	//printf("%c\n", buffer[2]);
+	//printf("%c\n", buffer[3]);
+	//printf("%c\n", buffer[4]);
+	//memset(func_name, 0, MAX_NAME_LEN+1);
 	snprintf(func_name, func_name_len + 1, "%s", buffer);
+	printf("Received function name: %s\n", func_name);
 
 	return 0;
 }
@@ -105,6 +113,7 @@ int send_function(int sockfd, char func_name[MAX_NAME_LEN + 1]) {
 
 	// Send the length of the provided name
 	uint16_t name_len = (uint16_t) strlen(func_name);
+	printf("Length of name sent: %hu\n", name_len);
 	if (name_len < MIN_NAME_LEN || name_len > MAX_NAME_LEN) {
 		fprintf(stderr, "Invalid name length - please provide a name between 1 and 1000 characters long\n");
 		return -1;
@@ -119,6 +128,7 @@ int send_function(int sockfd, char func_name[MAX_NAME_LEN + 1]) {
 
 	// Send the actual name to the server
 	snprintf(buffer, name_len + 1, "%s", func_name);
+	printf("Name sent: %s\n", func_name);
 	if ((n = write(sockfd, buffer, name_len)) < name_len) {
 		perror("socket");
 		return -1;
@@ -187,6 +197,7 @@ rpc_data* receive_rpc_data(int sockfd) {
 	int64_t data1 = ntohll(*(int64_t *)&buffer);
 	rpc_data* results = malloc(sizeof(rpc_data));
 	results->data1 = data1;
+	printf("Data 1 received: %ld\n", data1);
 
 	// Read in data2_len
 	if ((n = read(sockfd, buffer, 8)) < 8) {
@@ -194,6 +205,7 @@ rpc_data* receive_rpc_data(int sockfd) {
 		return NULL;
 	}
 	uint64_t data2_len = ntohll(*(uint64_t *)&buffer);
+	printf("Data 2 length received: %lu\n", data2_len);
 
 	// Read in data2 if data2_len != 0
 	if (data2_len > 0) {
@@ -215,6 +227,7 @@ rpc_data* receive_rpc_data(int sockfd) {
 		results->data2_len = data2_len;
 		results->data2 = malloc(data2_len);
 		memcpy(results->data2, buffer, data2_len);
+		printf("Data 2 received, %d byte(s)\n", n);
 		return results;
 	}
 	// otherwise set data2_len to 0 and data2 to null and return results
@@ -241,6 +254,7 @@ int send_rpc_data(int sockfd, rpc_data* payload) {
 		perror("socket");
 		return -1;
 	}
+	printf("Data 1 sent: %ld \n", ntohll(*buffer_cast));
 	free(buffer_cast);
 
 	// Check if data 2 exists and send the prefix indicating such (or data2_len converted to uint64)
@@ -266,6 +280,7 @@ int send_rpc_data(int sockfd, rpc_data* payload) {
 			return -1;
 		}
 		free(buffer_cast2);
+		printf("No data 2 to send\n");
 	}
 	// Send data 2 if data2 len > 0
 	else {
@@ -275,8 +290,10 @@ int send_rpc_data(int sockfd, rpc_data* payload) {
 		//}
 
 		// Send data2_len to the server  
+		printf("Actual data 2 length: %lu \n", data2_len);
 		uint64_t* buffer_cast2 = (uint64_t *) malloc(sizeof(uint64_t));
 		*buffer_cast2 = htonll(data2_len);
+		printf("Data 2 length sent: %lu \n", ntohll(*buffer_cast2));
 		if ((n = write(sockfd, buffer_cast2, 8)) < 8) {
 			perror("socket");
 			return -1;
@@ -299,6 +316,7 @@ int send_rpc_data(int sockfd, rpc_data* payload) {
 			perror("socket");
 			return -1;
 		}
+		printf("Data 2 sent, %d byte(s)\n", n);
 	}
 	return 0;
 }
@@ -342,6 +360,7 @@ rpc_server *rpc_init_server(int port) {
     //char port_buffer[MAX_PORT_DIGITS + 1];
 	sprintf(srv->port,"%d",port);
     //itoa(port, srv->port, BASE_10);
+    printf("Server Provided Port: %s\n", srv->port);
     //strcpy(srv->port, port_buffer);
 
 	/* Create the listening socket */
@@ -368,6 +387,8 @@ rpc_server *rpc_init_server(int port) {
 // but can start with only keeping track of one for testing purposes
 int rpc_register(rpc_server *srv, char *name, rpc_handler handler) {
 
+	printf("Now registering function %s\n", name);
+
 	if (srv == NULL || name == NULL || handler == NULL) {
 		return -1;
 	}
@@ -393,6 +414,9 @@ int rpc_register(rpc_server *srv, char *name, rpc_handler handler) {
 	// Otherwise, simply regiser the new function under the new name.
 	dict_add(srv->function_dict, name, handler);
 
+	printf("Function %s successfully registered\n", name);
+	printf("Function pointer for %s: %p\n", name, dict_find(srv->function_dict, name));
+
 	return REG_SUCCESS;
 }
 
@@ -403,6 +427,9 @@ int rpc_register(rpc_server *srv, char *name, rpc_handler handler) {
 // requests. If it is rpc_find, it will reply to the caller saying whether the name was found or not,
 // or possibly an error code
 void rpc_serve_all(rpc_server *srv) {
+
+
+	printf("Now serving client requests...\n");
 
     if (srv == NULL) {
         return;
@@ -436,11 +463,20 @@ void rpc_serve_all(rpc_server *srv) {
 
 		// Listen on socket - means we're ready to accept connections,
 		// incoming connection requests will be queued, man 3 listen
+
+
+		printf("Listening for connection...\n");
+		// maybe change to while loop so that listen() is repeatedly called until success or
+		// just remove exit()
 		if (listen(sockfd, 10) < 0) {
 			perror("listen");
 			//exit(EXIT_FAILURE);
 		}
 
+		// MAY HAVE TO ACCEPT CONNECTION EVERY TIME A REQUEST IS MADE OR USE SELECT-SERVER CODE
+		// TO MANAGE MULTIPLE CLIENT CONNECTIONS
+		
+		printf("Waiting until connection is accepted...\n");
 		// Accept a connection - blocks until a connection is ready to be accepted
 		// Get back a new file descriptor to communicate on
 		client_addr_size = sizeof client_addr;
@@ -454,6 +490,13 @@ void rpc_serve_all(rpc_server *srv) {
 		memset(buffer, 0, sizeof(buffer));
 		while ((n = read(newsockfd, buffer, 1)) > 0) {
 			// n is number of characters read / written
+			
+			// move memset to outside while loop if it causes program to be slow (in which case will
+			// just have to be careful not to read wrong sections of buffer into memory)
+			
+
+
+			printf("Message type prefix: %c\n", buffer[0]);
 
 			/* -------------------- */
 			/* Ignore test messages */
@@ -474,14 +517,17 @@ void rpc_serve_all(rpc_server *srv) {
 					continue;
 				}
 
+                printf("Function name before dictionary search: %s\n", func_name);
 				if (dict_find(srv->function_dict, func_name) != NULL) {
 					// let the caller know that the function was found
+					printf("Function found by server\n");
 					send_find_response(newsockfd, 's');
 					//sleep(2);
 					continue;
 				}
 				else {
 					// let the caller know that the function was not found
+					printf("Function not found by server\n");
 					send_find_response(newsockfd, 'f');
 					//sleep(2);
 					continue;
@@ -506,11 +552,15 @@ void rpc_serve_all(rpc_server *srv) {
 					rpc_data* in = NULL;
 					
 					if ((in = receive_rpc_data(newsockfd)) == NULL) {
+						printf("Failed to receive RPC data\n");
 						continue;
 					}
 
+					printf("Attempting to call the function with address: %p\n", procedure);
+
 					// Call the procedure
 					rpc_data* out = procedure(in);
+					printf("Returned from function call\n");
 					rpc_data_free(in);
 
 					// Check that NULL wasn't returned
@@ -562,6 +612,8 @@ void rpc_serve_all(rpc_server *srv) {
 				continue;
 			}
 		}
+		printf("Connection closed...\n");
+
 	}
 
 	// close listening socket 
@@ -622,6 +674,7 @@ rpc_client *rpc_init_client(char *addr, int port) {
 	}
 
 	sprintf(cl->port,"%d",port);
+    printf("Client Provided Port: %s\n", cl->port);
 
     int s;
 	struct addrinfo hints, *servinfo, *rp;
@@ -677,6 +730,8 @@ rpc_client *rpc_init_client(char *addr, int port) {
 // If name is not registered, it should return NULL. If the find operation fails, it returns NULL.
 rpc_handle *rpc_find(rpc_client *cl, char *name) {
 
+	printf("Attempting to find function: %s\n", name);
+
     char buffer[MAX_REQUEST_BYTES];
     int n;
 
@@ -712,6 +767,7 @@ rpc_handle *rpc_find(rpc_client *cl, char *name) {
 	// Could technically have different if statements for different error codes here to
 	// print descriptive error messages (although there is only one error in the case of find i think)
 	if (buffer[0] == 'e' || buffer[1] == 'f') {
+		printf("Find error or no function matched the name\n");
 		return NULL;
 	}
     else if (buffer[0] == 'r' && buffer[1] == 's') {
@@ -733,6 +789,7 @@ rpc_handle *rpc_find(rpc_client *cl, char *name) {
 // and its data2 field. The client will free these by rpc_data_free (defined below)
 rpc_data *rpc_call(rpc_client *cl, rpc_handle *h, rpc_data *payload) {
 
+	printf("Attempting to call function: %s\n", h->name);
 	// SHOULD CHECK THAT THE CLIENT IS NOT SENDING AN INVALID RPC_DATA
 
 	// SERVER SHOULD CHECK THAT THE HANDLER ISN'T RETURNING AN INVALID RPC_DATA
@@ -796,6 +853,7 @@ void rpc_close_client(rpc_client *cl) {
 
 	// If client hasn't yet been closed, close it and free cl
 	if (cl != NULL && (n = write(cl->sockfd, "t", 1)) != -1) {
+		printf("cl != NULL, n = %d, freeing, closing connection and returning...\n", n);
 		close(cl->sockfd);
 		free(cl);
     	cl = NULL;
@@ -803,12 +861,14 @@ void rpc_close_client(rpc_client *cl) {
 	}
 	// If cl hasn't been freed yet, free it
     else if (cl != NULL) { 
+		printf("cl != NULL, freeing and returning...\n");	
         free(cl);
     	cl = NULL;
 		return;
     }
     // cl == NULL so simply return
 	else {
+		printf("cl == NULL, returning...\n");	
     	return;
 	}
    
@@ -823,6 +883,7 @@ void rpc_close_client(rpc_client *cl) {
 
 // Frees the memory allocated for a dynamically allocated rpc_data struct
 void rpc_data_free(rpc_data *data) {
+	printf("rpc_data_free called...\n");
     if (data == NULL) {
         return;
     }

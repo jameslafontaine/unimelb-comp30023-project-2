@@ -16,7 +16,7 @@ int dict_find_index(dict_ptr dict, char *key) {
 }
 
 void* dict_find(dict_ptr dict, char *key) {
-    //printf("Searching dictionary for key: %s\n", key);
+    printf("Searching dictionary for key: %s\n", key);
     int idx = dict_find_index(dict, key);
     return idx == -1 ? NULL : dict->entry[idx].element;
 }

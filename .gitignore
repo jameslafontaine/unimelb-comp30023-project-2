@@ -2,11 +2,14 @@
 test.sh
 testval.sh
 src-proj1/
-debug/
+skel_client.c
+skel_server.c
 *.a
 *.txt
 transfer_utils.c
 skel-client
 skel-server
-new-client
-new-server
+test-client
+test-server
+test-client-debug
+test-server-debug

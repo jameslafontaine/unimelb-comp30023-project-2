@@ -180,7 +180,7 @@ rpc_data* receive_rpc_data(int sockfd) {
 
 	memset(buffer, 0, MAX_DATA2_BYTES);
 
-	//printf("Reading in data 1...\n");
+	printf("Reading in data 1...\n");
 	while ((n = read(sockfd, buffer, DATA1_SIZE)) < DATA1_SIZE) {
 		m = read(sockfd, buffer+n, 1);
 		if (m < 1) {
@@ -190,10 +190,10 @@ rpc_data* receive_rpc_data(int sockfd) {
 	}
 	
 	int64_t data1 = ntohll(*(int64_t *)&buffer);
-	rpc_data* results = malloc(sizeof(rpc_data));
-	results->data1 = data1;
+	rpc_data* recv = malloc(sizeof(rpc_data));
+	recv->data1 = data1;
 
-	//printf("Reading in data 2 length...\n");
+	printf("Reading in data 2 length...\n");
 	// Read in data2_len
 	while ((n = read(sockfd, buffer, DATA2_LEN_SIZE)) < DATA2_LEN_SIZE) {
 		m = read(sockfd, buffer+n, 1);
@@ -206,7 +206,7 @@ rpc_data* receive_rpc_data(int sockfd) {
 
 	// Read in data2 if data2_len > 0
 	if (data2_len > 0) {
-		//printf("Reading in data 2...\n");
+		printf("Reading in data 2...\n");
 		memset(buffer, 0, MAX_DATA2_BYTES);
 		while ((n = read(sockfd, buffer, data2_len)) < data2_len) {
 			m = read(sockfd, buffer+n, 1);
@@ -215,26 +215,17 @@ rpc_data* receive_rpc_data(int sockfd) {
 			}
 			n += m;
 		}
-		//printf("Finished reading in data 2...\n");
-		//if ((n = read(sockfd, buffer, MAX_DATA2_BYTES)) < MAX_DATA2_BYTES) {
-		//	perror("socket");
-		//	return NULL;
-		//}
-		//while (n < MAX_DATA2_BYTES) {
-		//	printf("Haven't received all of data 2 yet - reading more...\n");
-		//	n += read(sockfd, buffer+n, 1);
-		//	printf("Have now received %d bytes in total\n", n);
-		//}
-		results->data2_len = data2_len;
-		results->data2 = malloc(data2_len);
-		memcpy(results->data2, buffer, data2_len);
-		return results;
+
+		recv->data2_len = data2_len;
+		recv->data2 = malloc(data2_len);
+		memcpy(recv->data2, buffer, data2_len);
+		return recv;
 	}
-	// otherwise set data2_len to 0 and data2 to null and return results
+	// otherwise set data2_len to 0 and data2 to null and return recv
 	else if (data2_len == 0) {
-		results->data2_len = 0;
-		results->data2 = NULL;
-		return results;
+		recv->data2_len = 0;
+		recv->data2 = NULL;
+		return recv;
 	}
 	return NULL;
 }
@@ -243,13 +234,14 @@ rpc_data* receive_rpc_data(int sockfd) {
  
 int send_rpc_data(int sockfd, rpc_data* payload) {
 
-	int n;
+	int n, m;
 
 	// Check if payload is null
 	if (payload == NULL) {
 		return -1;
 	}
 
+	printf("Sending data 1...\n");
 	// Send data 1 to the server
 	int64_t data1 = (int64_t) payload->data1;  
 	
@@ -265,6 +257,7 @@ int send_rpc_data(int sockfd, rpc_data* payload) {
 	uint64_t data2_len = (uint64_t) payload->data2_len;
 	void* data2 = payload->data2;
 
+	printf("Checking data 2 validity...\n");
 	// Check validity of data2
 	if (data2_len > MAX_DATA2_BYTES) {
 		fprintf(stderr, "Overlength error\n");
@@ -274,48 +267,29 @@ int send_rpc_data(int sockfd, rpc_data* payload) {
 		fprintf(stderr, "Malformed input - data 2 and data2_len don't match\n");
 		return -1;
 	}
-	// Check if data 2 needs to be sent
-	else if (data2_len == 0 && data2 == NULL) {
 
-		uint64_t* buffer_cast2 = (uint64_t *) malloc(sizeof(uint64_t));
-		*buffer_cast2 = htonll(data2_len);
-		if ((n = write(sockfd, buffer_cast2, 8)) < 8) {
-			perror("socket");
-			return -1;
-		}
-		free(buffer_cast2);
+	// Send data 2 length
+
+	printf("Sending data 2 length...\n");
+	uint64_t* buffer_cast2 = (uint64_t *) malloc(sizeof(uint64_t));
+	*buffer_cast2 = htonll(data2_len);
+	if ((n = write(sockfd, buffer_cast2, DATA2_LEN_SIZE)) < DATA2_LEN_SIZE) {
+		perror("socket");
+		return -1;
 	}
+	free(buffer_cast2);
+
 	// Send data 2 if data2 len > 0
-	else {
-		//buffer[0] = 'y';
-		//if ((n = write(sockfd, buffer, 1)) < 1) {
-		//	perror("socket");
-		//}
+	if (data2_len > 0) {
 
-		// Send data2_len to the server  
-		uint64_t* buffer_cast2 = (uint64_t *) malloc(sizeof(uint64_t));
-		*buffer_cast2 = htonll(data2_len);
-		if ((n = write(sockfd, buffer_cast2, 8)) < 8) {
-			perror("socket");
-			return -1;
-		}
-		
-		free(buffer_cast2);
-
-		//if (n < 0) {
-		//	perror("socket");
-		//	return NULL;
-		//}
-		//memset(buffer, 0, sizeof(buffer));
-		//memcpy(buffer, data2, MAX_DATA2_BYTES);
-		n = write(sockfd, data2, data2_len);
-		//if ((n = write(sockfd, data2, MAX_DATA2_BYTES)) < MAX_DATA2_BYTES) { // may have to change to while loop
-		//	perror("socket");
-		//	return NULL;
-		//}
-		if (n < 0) {
-			perror("socket");
-			return -1;
+		printf("Sending data 2...\n");
+		// Send data 2
+		while ((n = write(sockfd, data2, data2_len)) < data2_len) {
+			m = write(sockfd, data2+n, 1);
+			if (m < 1) {
+				return -1;
+			}
+			n += m;
 		}
 	}
 	return 0;
@@ -550,7 +524,7 @@ void rpc_serve_all(rpc_server *srv) {
 							continue;
 						}	
 
-						/* Send the results back to the client */
+						/* Send the recv back to the client */
 
 						// Send response prefix
 						buffer[0] = 'r';
@@ -666,7 +640,7 @@ rpc_client *rpc_init_client(char *addr, int port) {
 	}
 
 	// Connect to first valid result
-	// Why are there multiple results? see man page (search 'several reasons')
+	// Why are there multiple recv? see man page (search 'several reasons')
 	// How to search? enter /, then text to search for, press n/N to navigate
 	for (rp = servinfo; rp != NULL; rp = rp->ai_next) {
 		cl->sockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);

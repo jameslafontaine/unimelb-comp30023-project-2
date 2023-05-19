@@ -24,9 +24,10 @@
 #define MIN_NAME_LEN 1
 #define MIN_ASCII_CHAR 32
 #define MAX_ASCII_CHAR 126
-#define MAX_DATA1_BYTES 8
+#define DATA1_SIZE 8
 #define MAX_DATA2_BYTES 100000
 #define MAX_REQUEST_BYTES 102000
+#define DATA2_LEN_SIZE 8
 #define FIND_REQUEST_BYTES 1005
 #define NAME_LEN_PREFIX 2
 
@@ -66,15 +67,19 @@ void send_find_response(int sockfd, const char status);
 
 int receive_function(int sockfd, char func_name[MAX_NAME_LEN + 1]) {
 	char buffer[MAX_NAME_LEN+1];
-	int n;
+	int n, m;
 
 	memset(buffer, 0, MAX_NAME_LEN+1);
 	// read in name length prefix
 	n = read(sockfd, buffer, NAME_LEN_PREFIX);
     while (n < NAME_LEN_PREFIX) {
-		printf("Haven't received full name length prefix yet - reading more...\n");
-		n += read(sockfd, buffer+n, 1);
-		printf("Have now received %d bytes in total\n", n);
+		//printf("Haven't received full name length prefix yet - reading more...\n");
+		m = read(sockfd, buffer+n, 1);
+		if (m < 1) {
+			return -1;
+		}
+		n += m;
+		//printf("Have now received %d bytes in total\n", n);
 	}
 	uint16_t func_name_len = ntohs(*(uint16_t*)&buffer);
 	// should probably move this check to rpc_find but doesn't hurt to have it here as well
@@ -88,9 +93,13 @@ int receive_function(int sockfd, char func_name[MAX_NAME_LEN + 1]) {
 	// read in the actual function name + '\0'
 	n = read(sockfd, buffer, func_name_len);
 	while (n < func_name_len) {
-		printf("Haven't received full function name yet - reading more...\n");
-		n += read(sockfd, buffer+n, func_name_len - n);
-		printf("Have now received %d bytes in total\n", n);
+		//printf("Haven't received full function name yet - reading more...\n");
+		m = read(sockfd, buffer+n, 1);
+		if (m < 1) {
+			return -1;
+		}
+		n += m;
+		//printf("Have now received %d bytes in total\n", n);
 	}
 	snprintf(func_name, func_name_len + 1, "%s", buffer);
 
@@ -167,46 +176,50 @@ rpc_data* receive_rpc_data(int sockfd) {
 
 	char buffer[MAX_DATA2_BYTES];
 	//char* buffer = (char *) malloc(MAX_DATA2_BYTES);
-	int n;
+	int n, m;
 
 	memset(buffer, 0, MAX_DATA2_BYTES);
 
-	if ((n = read(sockfd, buffer, MAX_DATA1_BYTES)) < MAX_DATA1_BYTES) {
-		perror("socket");
-		return NULL;
+	//printf("Reading in data 1...\n");
+	while ((n = read(sockfd, buffer, DATA1_SIZE)) < DATA1_SIZE) {
+		m = read(sockfd, buffer+n, 1);
+		if (m < 1) {
+			return NULL;
+		}
+		n += m;
 	}
-	if (n < 0) {
-		perror("socket");
-		return NULL;
-	}
-	while (n < MAX_DATA1_BYTES) {
-		printf("Haven't received all of data 1 yet - reading more...\n");
-		n += read(sockfd, buffer+n, 1);
-		printf("Have now received %d bytes in total\n", n);
-	}
+	
 	int64_t data1 = ntohll(*(int64_t *)&buffer);
 	rpc_data* results = malloc(sizeof(rpc_data));
 	results->data1 = data1;
 
+	//printf("Reading in data 2 length...\n");
 	// Read in data2_len
-	if ((n = read(sockfd, buffer, 8)) < 8) {
-		perror("socket");
-		return NULL;
+	while ((n = read(sockfd, buffer, DATA2_LEN_SIZE)) < DATA2_LEN_SIZE) {
+		m = read(sockfd, buffer+n, 1);
+		if (m < 1) {
+			return NULL;
+		}
+		n += m;
 	}
 	uint64_t data2_len = ntohll(*(uint64_t *)&buffer);
 
-	// Read in data2 if data2_len != 0
+	// Read in data2 if data2_len > 0
 	if (data2_len > 0) {
+		//printf("Reading in data 2...\n");
 		memset(buffer, 0, MAX_DATA2_BYTES);
-		n = read(sockfd, buffer, data2_len);
+		while ((n = read(sockfd, buffer, data2_len)) < data2_len) {
+			m = read(sockfd, buffer+n, 1);
+			if (m < 1) {
+				return NULL;
+			}
+			n += m;
+		}
+		//printf("Finished reading in data 2...\n");
 		//if ((n = read(sockfd, buffer, MAX_DATA2_BYTES)) < MAX_DATA2_BYTES) {
 		//	perror("socket");
 		//	return NULL;
 		//}
-		if (n < 0) {
-			perror("socket");
-			return NULL;
-		}
 		//while (n < MAX_DATA2_BYTES) {
 		//	printf("Haven't received all of data 2 yet - reading more...\n");
 		//	n += read(sockfd, buffer+n, 1);
@@ -237,7 +250,7 @@ int send_rpc_data(int sockfd, rpc_data* payload) {
 	
 	int64_t* buffer_cast = (int64_t *) malloc(sizeof(int64_t));
 	*buffer_cast = htonll(data1);
-	if ((n = write(sockfd, buffer_cast, MAX_DATA1_BYTES)) < MAX_DATA1_BYTES) {
+	if ((n = write(sockfd, buffer_cast, DATA1_SIZE)) < DATA1_SIZE) {
 		perror("socket");
 		return -1;
 	}
@@ -755,8 +768,11 @@ rpc_data *rpc_call(rpc_client *cl, rpc_handle *h, rpc_data *payload) {
 		return NULL;
 	}
 	// Send function name length and function name to server
-	send_function(sockfd, h->name);
+	if (send_function(sockfd, h->name) < 0) {
+        return NULL;
+	}
 	
+	// Send RPC data to the server
 	if (send_rpc_data(sockfd, payload) < 0) { 
 		return NULL;
 	}

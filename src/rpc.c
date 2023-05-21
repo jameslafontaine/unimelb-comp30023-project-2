@@ -110,7 +110,7 @@ void* serve_client(void* args) {
 
     int newsockfd = ((thread_args *)args)->newsockfd;
     rpc_server* srv = ((thread_args *)args)->srv;
-
+	
     while ((n = read(newsockfd, buffer, 1)) > 0) {
 
         /* -------------------- */

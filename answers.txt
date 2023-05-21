@@ -15,33 +15,35 @@ James La Fontaine, jlafontaine, 1079860
 
 3. What transport layer protocol should be used? What are the tradeoffs
 
-	TCP is the transport layer protocol that should be used because...
+	TCP is the transport layer protocol that should be used as it deals with IP layer packet loss, duplication and the
+   maximum size restrictions of IP packets. Therefore, TCP is reliable. TCP also ensures that bytes arrive in order. However,
+   a tradeoff that TCP makes to fulfill these conditions is speed: a transport layer protocol like UDP is faster
+   than TCP at the expense of reliability. Unless this RPC system was specifically being designed for time-sensitive procedures,
+   TCP seems like a suitable choice of transport layer protocol.
 
 4. In which function(s) should the socket(s) be created?
 
-	
+	The listening socket should be created in rpc_init_server() as this is where the port is provided. The socket for the connection should be created
+   in rpc_serve_all() as this is when the server starts accepting client connections. The client socket should be created in rpc_init_client() as 
+   this is where the port and address are provided.
 
 
 5. Should rpc_client and rpc_server be allocated dynamically or statically? 
    What are the implications for the client and server code?
 	
-	rpc_client and rpc_server should be allocated dynamically so that the RPC system supports
-	multiple (but an unknown amount of) instances of servers and clients and so that the memory pointed to persists across the different function calls. The implications for the client
-        and server code are that memory leaks will occur if the dynamically allocated structs are not freed once 
-	they're no longer needed.
+	rpc_client and rpc_server should be allocated dynamically so that they remain in memory after
+   the function which initialises them returns. The client and server code will have to free them to avoid memory leaks.
+   However, since the server loops indefinitely it will not be able to free rpc_server unless signal handling was implemented.
 
 6. What happens if one host uses big-endian byte order and the other uses little-endian? 
    How does that relate to "network byte order"?
 
 	If hosts use different byte orderings then they will interpret the same sequence of bytes as different numbers
 	due to the different assumptions they make about byte ordering. Using network byte ordering (defined to always be big-endian)  
-        allows the hosts to exchange information without confusion because of byte ordering.
+   allows the hosts to exchange information without confusion because of byte ordering.
 
 
 Application Layer Protocol Documentation for the RPC system:
-
-
-see prac 10 for example.
 
 TCP is the transport layer protocol that will be used. This will deal with IP layer packet loss and duplication as TCP retransmits
 lost packets and discards duplicate packets when needed. TCP also handles the fact that IP packets have a
@@ -49,17 +51,19 @@ maximum allowed size by sending data in segments / a byte stream comprised of mu
 
 1st byte for all messages is a character prefix denoting the type of message being sent ('f' for find, 'c' for call, 'r' for response, 'e' for error)
 
-for find messages, the following 2 bytes denote the length (x) of the function name in bytes, and the remaining x bytes (up to 1000)
+For find messages, the following 2 bytes denote the length (x) of the function name in bytes, and the remaining x bytes (up to 1000)
 form the function name.
 
-for find response messages, the second byte denotes whether the function was found or not ('s' for success, 'f' for failure)
+For find response messages, the second byte denotes whether the function was found or not ('s' for success, 'f' for failure)
 
-for call messages, the following 2 bytes denote the length (x) of the function name in bytes, the subsequent x bytes (up to 1000)
- represent the name of the function to be called, the next 8 bytes after that represent data1, followed by 1 character byte indicating malformed input ('m' for malformed, 'v' for valid), followed by 8 bytes indicating data2_len, followed by data2_len bytes containing data2 (up to 100kB)
+For call messages, the following 2 bytes denote the length (x) of the function name in bytes, the subsequent x bytes (up to 1000)
+ represent the name of the function to be called, the next 8 bytes after that represent data1, followed by 1 character byte indicating malformed data2 input 
+ ('m' for malformed, 'v' for valid), followed by 8 bytes indicating data2_len, followed by data2_len bytes containing data2 (up to 100kB)
 
-for call response messages, the following 8 bytes contain data1, followed by 1 character byte indicating malformed input ('m' for malformed, 'v' for valid), followed by 8 bytes indicating data2_len, followed by data2_len bytes containing data2 (up to 100kB)
+For call response messages, the following 8 bytes contain data1, followed by 1 character byte indicating malformed data2 input ('m' for malformed, 'v' for valid), 
+followed by 8 bytes indicating data2_len, followed by data2_len bytes containing data2 (up to 100kB)
 
-for error messages, there is simply a single second byte that denotes the error code depending on the type of failure.
+For error messages, there is simply a single second byte that denotes the error code depending on the type of failure.
 
 Fixed sized field used for data2_len (8 bytes) for simplicity under the assumption that size_t is not larger than 64 bits for any architecture using the rpc system.
 
@@ -67,20 +71,32 @@ Numbers are sent in big endian (network byte order)
 
 
 
-Example packet format for ____ message:
+Example packet format for call request:
 
- 0                   1                   2                   3
- 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|          Source Port          |        Destination Port       | each vertical line is 1 bit, each horizontal line is 1 bit
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|                        Sequence Number                        |
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|                     Acknowledgment Number                     |
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-| Offset|  Res. |     Flags     |             Window            |
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|            Checksum           |         Urgent Pointer        |
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|                    Options                    |    Padding    |
-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+                                                          
+  0  1  2  3  4  5  6  7  0  1  2  3  4  5  6  7  0  1  2  3  4  5  6  7  
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+|    Message type       |              Function name length             | 
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+|                                                                       |
+|                       Function name (up to 1kB)                       |
+|                                ...                                    |
+|                                ...                                    |
+|                                ...                                    |
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+|                                                                       |
+|                          Data 1 (8 bytes)     +--+--+--+--+--+--+--+--|                        
+|                                               |  Malformity indicator |                 
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+|                                                                       |
+|                       Data 2 length (8 bytes) +--+--+--+--+--+--+--+--|                        
+|                                               |                       |                 
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+                       |
+|                                                                       |
+|                       Data 2 length (up to 100kB)                     | 
+|                                ...                                    |
+|                                ...                                    |
+|                                ...                                    |
+|                                ...                                    |
+|                                ...                                    |
+|                                ...                                    |

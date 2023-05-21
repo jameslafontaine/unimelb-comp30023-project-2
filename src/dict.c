@@ -5,6 +5,7 @@
 
 // THIS CODE HAS BEEN CREATED BY SOMEONE ELSE AND WAS SOURCED FROM
 // https://stackoverflow.com/questions/4384359/quick-way-to-implement-dictionary-in-c
+// SLIGHT MODIFICATIONS HAVE BEEN MADE (MOSTLY DATA TYPES)
 
 int dict_find_index(dict_ptr dict, char *key) {
     for (int i = 0; i < dict->len; i++) {

@@ -4,6 +4,9 @@ RPC_SYSTEM=rpc.o
 RPC_SYSTEM_A=rpc.a
 RPC_SYSTEM_A_DEBUG=debug/rpc.a
 
+RPC_SERVER=rpc-server
+RPC_CLIENT=rpc-client
+
 TEST_SERVER_EXE=test-server
 TEST_CLIENT_EXE=test-client
 TEST_SERVER_DEBUG=test-server-debug
@@ -14,16 +17,24 @@ SKEL_CLIENT_A=skel_client.a
 SKEL_SERVER_EXE=skel-server
 SKEL_CLIENT_EXE=skel-client
 
-LDFLAGS=-lpthread         # any linker flags required
+# Any linker flags required
+LDFLAGS=-lpthread         
 
 .PHONY: format all clean
 
-$(RPC_SYSTEM_A): src/rpc.o src/dict.o
+exe: $(RPC_SERVER) $(RPC_CLIENT)
+
+$(RPC_SYSTEM_A): src/rpc.o src/dict.o src/transfer_utils.o
 	ar rcs $@ $^
 
 $(RPC_SYSTEM_A_DEBUG): debug/rpc.o debug/dict.o
 	ar rcs $@ $^
 
+$(RPC_SERVER): src/test_server.a $(RPC_SYSTEM_A) 
+	cc -o $@ $^ $(CFLAGS) $(LDFLAGS)
+
+$(RPC_CLIENT): src/test_client.a $(RPC_SYSTEM_A) 
+	cc -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 # --------------------------------------------------
 # TEST SERVER AND CLIENT
@@ -69,6 +80,10 @@ skel_client.o: src/skel_client.c
 skel_server.o: src/skel_server.c
 	$(CC) -c -o $@ $< $(CFLAGS)
 
+# --------------------------------------------------
+# MISCELLANEOUS
+# --------------------------------------------------
+
 
 debug/%.o: debug/%.c debug/%.h
 	$(CC) -c -o $@ $< $(CFLAGS)
@@ -80,5 +95,7 @@ format:
 	clang-format -style=file -i *.c *.h
 
 clean:
-	rm -f *.a *.o src/*.o debug/*.o *.o src/*.o debug/*.o $(SKEL_SERVER_EXE) $(SKEL_CLIENT_EXE) $(TEST_CLIENT_EXE) $(TEST_SERVER_EXE) $(TEST_CLIENT_DEBUG) $(TEST_SERVER_DEBUG)
+	rm -f *.a *.o src/*.o debug/*.o *.o src/*.o debug/*.o $(SKEL_SERVER_EXE) \
+	      $(SKEL_CLIENT_EXE) $(TEST_CLIENT_EXE) $(TEST_SERVER_EXE) $(TEST_CLIENT_DEBUG) \
+		  $(TEST_SERVER_DEBUG) $(RPC_SERVER) $(RPC_CLIENT)
 

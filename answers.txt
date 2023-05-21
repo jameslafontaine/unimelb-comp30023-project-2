@@ -15,7 +15,7 @@ James La Fontaine, jlafontaine, 1079860
 
 3. What transport layer protocol should be used? What are the tradeoffs
 
-	TCP is the transport layer protocol that should be used as it deals with IP layer packet loss, duplication and the
+   TCP is the transport layer protocol that should be used as it deals with IP layer packet loss, duplication and the
    maximum size restrictions of IP packets. Therefore, TCP is reliable. TCP also ensures that bytes arrive in order. However,
    a tradeoff that TCP makes to fulfill these conditions is speed: a transport layer protocol like UDP is faster
    than TCP at the expense of reliability. Unless this RPC system was specifically being designed for time-sensitive procedures,
@@ -23,7 +23,7 @@ James La Fontaine, jlafontaine, 1079860
 
 4. In which function(s) should the socket(s) be created?
 
-	The listening socket should be created in rpc_init_server() as this is where the port is provided. The socket for the connection should be created
+   The listening socket should be created in rpc_init_server() as this is where the port is provided. The socket for the connection should be created
    in rpc_serve_all() as this is when the server starts accepting client connections. The client socket should be created in rpc_init_client() as 
    this is where the port and address are provided.
 
@@ -31,15 +31,15 @@ James La Fontaine, jlafontaine, 1079860
 5. Should rpc_client and rpc_server be allocated dynamically or statically? 
    What are the implications for the client and server code?
 	
-	rpc_client and rpc_server should be allocated dynamically so that they remain in memory after
+   rpc_client and rpc_server should be allocated dynamically so that they remain in memory after
    the function which initialises them returns. The client and server code will have to free them to avoid memory leaks.
    However, since the server loops indefinitely it will not be able to free rpc_server unless signal handling was implemented.
 
 6. What happens if one host uses big-endian byte order and the other uses little-endian? 
    How does that relate to "network byte order"?
 
-	If hosts use different byte orderings then they will interpret the same sequence of bytes as different numbers
-	due to the different assumptions they make about byte ordering. Using network byte ordering (defined to always be big-endian)  
+   If hosts use different byte orderings then they will interpret the same sequence of bytes as different numbers
+   due to the different assumptions they make about byte ordering. Using network byte ordering (defined to always be big-endian)  
    allows the hosts to exchange information without confusion because of byte ordering.
 
 

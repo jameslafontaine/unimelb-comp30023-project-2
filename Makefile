@@ -22,8 +22,6 @@ LDFLAGS=-lpthread
 
 .PHONY: format all clean
 
-exe: $(RPC_SERVER) $(RPC_CLIENT)
-
 $(RPC_SYSTEM_A): src/rpc.o src/dict.o src/transfer_utils.o
 	ar rcs $@ $^
 
@@ -35,6 +33,8 @@ $(RPC_SERVER): src/test_server.a $(RPC_SYSTEM_A)
 
 $(RPC_CLIENT): src/test_client.a $(RPC_SYSTEM_A) 
 	cc -o $@ $^ $(CFLAGS) $(LDFLAGS)
+
+exe: $(RPC_SERVER) $(RPC_CLIENT)
 
 # --------------------------------------------------
 # TEST SERVER AND CLIENT

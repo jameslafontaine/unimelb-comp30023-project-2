@@ -12,3 +12,5 @@ test-client
 test-server
 test-client-debug
 test-server-debug
+rpc-server
+rpc-client

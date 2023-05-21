@@ -219,6 +219,7 @@ void* serve_client(void* args) {
         }
     }
     pthread_detach(((thread_args *)args)->pid);
+
     free(args);
 
     return NULL;

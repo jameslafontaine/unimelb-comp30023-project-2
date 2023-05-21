@@ -93,7 +93,7 @@ Example packet format for call request:
 |                                               |                       |                 
 +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+                       |
 |                                                                       |
-|                       Data 2 length (up to 100kB)                     | 
+|                         Data 2 (up to 100kB)                          | 
 |                                ...                                    |
 |                                ...                                    |
 |                                ...                                    |

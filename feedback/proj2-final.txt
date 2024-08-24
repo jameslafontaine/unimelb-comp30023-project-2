@@ -1,0 +1,248 @@
+HEAD is now at d96c0ef Fixed typos in answers.txt for protocol description
+COMP30023 2023 Project 2 After Deadline Tests
+v23, last modified 10/06/23
+
+Checking out d96c0ef837771c9cf2b9d1db8c4a911b123b61e4
+Commit log:
+d96c0ef 2023-05-21T17:37:56+10:00: Fixed typos in answers.txt for protocol description
+e4ce0e0 2023-05-21T12:37:57+10:00: Added trailing newline to answers.txt
+fecf8ec 2023-05-21T11:57:33+10:00: Removed rpc-client and rpc-server executable files, changed top Makefile rule
+b1548d8 2023-05-21T11:33:19+10:00: Completed answers.txt, cleaned up code, moved data transfer functions into transfer_utils.c
+44d3988 2023-05-20T09:18:47+10:00: Removed printf for listening and accepting connections
+f6e2332 2023-05-20T09:17:27+10:00: Attempted to implement multi-threaded server, added answers.txt
+c262d93 2023-05-20T08:06:52+10:00: Removed debugging code, adjusted protocol to better handle malformed rpc_data being sent from client
+151b904 2023-05-20T07:29:25+10:00: Added debugging code for sending and receiving of rpc_data
+7e6d27a 2023-05-20T07:14:54+10:00: Added check for null payload when sending data
+f697538 2023-05-20T07:11:29+10:00: Implemented further checks during data transfer between client and server
+35df1cf 2023-05-20T06:41:07+10:00: Fixed client closing connection bug and moved debugging code to debug folder
+115a929 2023-05-19T09:20:26+10:00: Code refactoring, rpc_data transfer bug fixes and memory related bug fixes
+ba646de 2023-05-18T03:40:06+10:00: Implemented call request handling on server side
+6d8cb93 2023-05-17T13:08:26+10:00: Implemented rpc_call on client side
+10ddb3a 2023-05-17T11:37:02+10:00: Implemented find requests on client side
+ae465ae 2023-05-17T10:20:12+10:00: Added find request handling for the server side
+99e4fa8 2023-05-16T07:07:33+10:00: Implemented function registration in rpc_register
+c949fbe 2023-05-15T04:33:25+10:00: Partial socket implementation for server and client side
+78c0d8d 2023-05-13T00:50:09+10:00: Local repository set up
+7f453e0 2023-04-24T21:47:23+10:00: init: add .gitlab-ci.yml
+
+make -B && make clean (output suppressed)
+
+make clean
+rm -f *.a *.o src/*.o debug/*.o *.o src/*.o debug/*.o skel-server \
+      skel-client test-client test-server test-client-debug \
+	  test-server-debug rpc-server rpc-client
+
+make
+cc -c -o src/rpc.o src/rpc.c -Wall -g 
+cc -c -o src/dict.o src/dict.c -Wall -g 
+cc -c -o src/transfer_utils.o src/transfer_utils.c -Wall -g 
+ar rcs rpc.a src/rpc.o src/dict.o src/transfer_utils.o
+
+OK -- rpc.a found. Copying to clean working directory.
+./rpc-server and ./rpc-client not found
+Found LDFLAGS "-lpthread"
+Task 9: Found
+
+Linking with test client & server
+cc -o test_client /framework/client.a /exe/rpc.a -lpthread
+cc -o test_server /framework/server.a /exe/rpc.a -lpthread
+
+
+Visible Tests
+Task A missing (0.25|0|0|0|0): Passed
+Task A 1+1 (0.25|0.5|0.5|0|0): Passed
+Task A 127+127 (0|0.25|0.25|0|0): Passed
+Task A abc (0.25|0.25|0.25|0|0): Passed
+Task A call-twice (0|0|0|0.25|0): Passed
+Task A call2 (0.25|0|0|0.5|0): Passed
+Task A switch1 (0|0|0|0.25|0): Passed
+Task A bad-func-client (0|0|0|0|0.25): Passed
+Task A bad-func-server (0|0|0|0|0.25): Passed
+Task 5 endian1-da7a (0.10): Passed
+Task 5 endian2-f (0.20): Passed
+Task 5 endian3-max (0.20): Passed
+Task 9 block1 (0.25): Passed
+Task 9 block2 (0.25): Passed
+
+Hidden (valgrind)
+Task v valgrind-missing (0): Passed
+Task v valgrind-1+1 (0): Passed
+Task v valgrind-abc (0): Passed
+Task v valgrind-call2 (0): Passed
+
+Hidden Tests
+Task A double-find (0.25|0|0|0|0): Passed
+Task A find-addr-port (0.25|0|0|0|0): Passed
+Task A name-1000 (0.25|0.125|0.125|0|0): Passed
+Task A name-diff (0.25|0.125|0.125|0|0): Passed
+Task A echo-binary (0|0.25|0.25|0|0): Passed
+Task A echo-99999 (0|0.25|0.25|0|0): Failed (0|0|0|0|0)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Client exited with unexpected exit code 124
+Server log mismatch
+---
+handler echo2: data1 0, data2 sha256 3d8345b		      <
+---
+Client log mismatch
+---
+rpc_call: instance 0, call of echo2 received data1 = 0, data2 <
+rpc_close_client: instance 0				      <
+---
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Task A double-register (0|0.25|0.25|0|0): Passed
+Task A substring-name (0|0|0|0.25|0): Passed
+Task A 10-functions (0|0|0|0.5|0): Passed
+Task A call-alt (0|0|0|0.25|0): Passed
+/test_helper.sh: line 12:  1634 Segmentation fault      timeout -v -k 5s 10s "./$exe" < "$input" > "$output" 2> /dev/null
+/test_helper.sh: line 72:  1628 Killed                  "./$exe" < "$input" > "$output" 2> /dev/null
+Task S null-args (0.10): Failed
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Client exited with unexpected exit code 139
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Task S bad-port-dup (0.05): Passed
+Task S bad-port (0.05): Passed
+/test_helper.sh: line 12:  1700 Segmentation fault      timeout -v -k 5s 10s "./$exe" < "$input" > "$output" 2> /dev/null
+/test_helper.sh: line 72:  1694 Killed                  "./$exe" < "$input" > "$output" 2> /dev/null
+Task S bad-addr-port (0.10): Failed
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Client exited with unexpected exit code 139
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Task S kill-server (0.15): Passed
+Task S kill-client (0.15): Failed
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Server died unexpectedly
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Task S spam (0.4): Passed
+Task 9 switch-client (0.25): Passed
+Task 9 block-2000 (0.25): Passed
+
+=============== REPORT ===============
+James La Fontaine, jlafontaine, 1079860(CR)
+(CR)
+1. Should the server accept calls from everyone, or just a subset of users?(CR)
+(CR)
+   Depending on the type of operations the server provides, it may be reasonable to accept calls from everyone.(CR)
+   However, if malicious users overloading the server with requests is a concern, or the server provides functions(CR)
+   which have reason not to be publicly available, then the server should only accept calls from a subset of users.(CR)
+(CR)
+2. Should authentication etc. be provided by the RPC framework, (CR)
+   or by the functions that use the RPC framework?(CR)
+(CR)
+   Authentication should be provided by the RPC framework as it is ultimately what creates and handles the connections between(CR)
+   client and server. Additionally, a large portion of developers utilising the RPC framework will likely(CR)
+   require the ability to authenticate and thus should not all be required to fully implement it themselves.(CR)
+(CR)
+3. What transport layer protocol should be used? What are the tradeoffs(CR)
+(CR)
+   TCP is the transport layer protocol that should be used as it deals with IP layer packet loss, duplication and the(CR)
+   maximum size restrictions of IP packets. Therefore, TCP is reliable. TCP also ensures that bytes arrive in order. However,(CR)
+   a tradeoff that TCP makes to fulfill these conditions is speed: a transport layer protocol like UDP is faster(CR)
+   than TCP at the expense of reliability. Unless this RPC system was specifically being designed for time-sensitive procedures,(CR)
+   TCP seems like a suitable choice of transport layer protocol.(CR)
+(CR)
+4. In which function(s) should the socket(s) be created?(CR)
+(CR)
+   The listening socket should be created in rpc_init_server() as this is where the port is provided. The socket for the connection should be created(CR)
+   in rpc_serve_all() as this is when the server starts accepting client connections. The client socket should be created in rpc_init_client() as (CR)
+   this is where the port and address are provided.(CR)
+(CR)
+(CR)
+5. Should rpc_client and rpc_server be allocated dynamically or statically? (CR)
+   What are the implications for the client and server code?(CR)
+(HT)(CR)
+   rpc_client and rpc_server should be allocated dynamically so that they remain in memory after(CR)
+   the function which initialises them returns. The client and server code will have to free them to avoid memory leaks.(CR)
+   However, since the server loops indefinitely it will not be able to free rpc_server unless signal handling was implemented.(CR)
+(CR)
+6. What happens if one host uses big-endian byte order and the other uses little-endian? (CR)
+   How does that relate to "network byte order"?(CR)
+(CR)
+   If hosts use different byte orderings then they will interpret the same sequence of bytes as different numbers(CR)
+   due to the different assumptions they make about byte ordering. Using network byte ordering (defined to always be big-endian)  (CR)
+   allows the hosts to exchange information without confusion because of byte ordering.(CR)
+(CR)
+(CR)
+Application Layer Protocol Documentation for the RPC system:(CR)
+(CR)
+TCP is the transport layer protocol that will be used. This will deal with IP layer packet loss and duplication as TCP retransmits(CR)
+lost packets and discards duplicate packets when needed. TCP also handles the fact that IP packets have a(CR)
+maximum allowed size by sending data in segments / a byte stream comprised of multiple IP packets.(CR)
+(CR)
+1st byte for all messages is a character prefix denoting the type of message being sent ('f' for find, 'c' for call, 'r' for response, 'e' for error)(CR)
+(CR)
+For find messages, the following 2 bytes denote the length (x) of the function name in bytes, and the remaining x bytes (up to 1000)(CR)
+form the function name.(CR)
+(CR)
+For find response messages, the second byte denotes whether the function was found or not ('s' for success, 'f' for failure)(CR)
+(CR)
+For call messages, the following 2 bytes denote the length (x) of the function name in bytes, the subsequent x bytes (up to 1000)(CR)
+ represent the name of the function to be called, the next 8 bytes after that represent data1, followed by 1 character byte indicating malformed data2 input (CR)
+ ('m' for malformed, 'v' for valid), followed by 8 bytes indicating data2_len, followed by data2_len bytes containing data2 (up to 100kB)(CR)
+(CR)
+For call response messages, the following 8 bytes contain data1, followed by 1 character byte indicating malformed data2 input ('m' for malformed, 'v' for valid), (CR)
+followed by 8 bytes indicating data2_len, followed by data2_len bytes containing data2 (up to 100kB)(CR)
+(CR)
+For error messages, there is simply a single second byte that denotes the error code depending on the type of failure.(CR)
+(CR)
+Fixed sized field used for data2_len (8 bytes) for simplicity under the assumption that size_t is not larger than 64 bits for any architecture using the rpc system.(CR)
+(CR)
+Numbers are sent in big endian (network byte order)(CR)
+(CR)
+(CR)
+(CR)
+Example packet format for call request:(CR)
+(CR)
+                                                          (CR)
+  0  1  2  3  4  5  6  7  0  1  2  3  4  5  6  7  0  1  2  3  4  5  6  7  (CR)
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+(CR)
+|    Message type       |              Function name length             | (CR)
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+(CR)
+|                                                                       |(CR)
+|                       Function name (up to 1kB)                       |(CR)
+|                                ...                                    |(CR)
+|                                ...                                    |(CR)
+|                                ...                                    |(CR)
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+(CR)
+|                                                                       |(CR)
+|                          Data 1 (8 bytes)     +--+--+--+--+--+--+--+--|                        (CR)
+|                                               |  Malformity indicator |                 (CR)
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+(CR)
+|                                                                       |(CR)
+|                       Data 2 length (8 bytes) +--+--+--+--+--+--+--+--|                        (CR)
+|                                               |                       |                 (CR)
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+                       |(CR)
+|                                                                       |(CR)
+|                         Data 2 (up to 100kB)                          | (CR)
+|                                ...                                    |(CR)
+|                                ...                                    |(CR)
+|                                ...                                    |(CR)
+|                                ...                                    |(CR)
+|                                ...                                    |(CR)
+|                                ...                                    |(CR)
+======================================
+
+======= Automated Grading Assumptions Below =======
+Re-examination Guidelines: If you'd like to have your assessment grade reviewed, you need to fill the grade review form.
+Do not email as it is very difficult to keep track of 600+ students using email, we prefer to have everything visible on a single spreadsheet.
+
+=============== START RESULTS TABLE ===============
+Task  1: Client finds module on server        2.00
+Task  2: Remote procedure is called correctly 1.750
+Task  3: Results are returned to client       1.750
+Task  4: Supports multiple procedures         2.00
+Task 5A: Portability                          .50
+Task 5B: Safety                               1.15
+Task  6: Build quality                        1
+Task  7: Quality of software practices        2
+Task  8: Planning and Protocol description    1
+Task  9: Non-blocking                         1.00
+Project 2 (Total):                            14.15
+================ END RESULTS TABLE ================
+Assessor comments:
+Excellent, descriptive commit messages
+Good use of data structures
+Well modularised
+Good, descriptive comments
+Report - Questions Advanced (0.50)
+Report - Protocol Description Advanced (0.3)
+Report - Protocol Clear Packet Formats (0.2)

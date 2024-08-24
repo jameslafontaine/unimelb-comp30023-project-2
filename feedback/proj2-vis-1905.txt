@@ -1,0 +1,360 @@
+COMP30023 2023 Project 2 Before Deadline Tests (Feedback)
+v17, last modified 16/05/23
+
+WARNING: No commit hash given
+
+Commit log:
+115a929 2023-05-19T09:20:26+10:00: Code refactoring, rpc_data transfer bug fixes and memory related bug fixes
+ba646de 2023-05-18T03:40:06+10:00: Implemented call request handling on server side
+6d8cb93 2023-05-17T13:08:26+10:00: Implemented rpc_call on client side
+10ddb3a 2023-05-17T11:37:02+10:00: Implemented find requests on client side
+ae465ae 2023-05-17T10:20:12+10:00: Added find request handling for the server side
+99e4fa8 2023-05-16T07:07:33+10:00: Implemented function registration in rpc_register
+c949fbe 2023-05-15T04:33:25+10:00: Partial socket implementation for server and client side
+78c0d8d 2023-05-13T00:50:09+10:00: Local repository set up
+7f453e0 2023-04-24T21:47:23+10:00: init: add .gitlab-ci.yml
+
+make -B && make clean (output suppressed)
+
+2 executable files found. Make sure that your 'make clean' works. 0.5 from build quality.
+Executable files are:
+./skel-client
+./skel-server
+-----------------------------------
+
+make clean
+rm -f *.a *.o src/*.o debug/*.o *.o src/*.o debug/*.o  
+
+make
+cc -c -o skel_server.o src/skel_server.c -Wall -g 
+ar rcs skel_server.a skel_server.o
+cc -c -o rpc.o src/rpc.c -Wall -g 
+cc -c -o dict.o src/dict.c -Wall -g 
+ar rcs rpc.a rpc.o dict.o
+cc -o skel-server skel_server.a rpc.a -Wall -g 
+cc -c -o skel_client.o src/skel_client.c -Wall -g 
+ar rcs skel_client.a skel_client.o	
+cc -o skel-client skel_client.a rpc.a -Wall -g 
+
+OK -- rpc.a found. Copying to clean working directory.
+./rpc-server and ./rpc-client not found
+Did not find (valid) LDFLAGS in Makefile
+Task 9: Not Found
+
+Linking with test client & server
+cc -o test_client /framework/client.a /exe/rpc.a 
+cc -o test_server /framework/server.a /exe/rpc.a 
+
+
+
+Task A missing (0.25|0|0|0|0): Failed (0.25|0|0|0|0)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Server log mismatch
+---
+							      >	Server Provided Port: 2923
+---
+Client log mismatch
+---
+							      >	Client Provided Port: 2923
+							      >	Attempting to find function: missing
+							      >	Length of name sent: 7
+							      >	Name sent: missing
+							      >	Find error or no function matched the name
+---
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Task A 1+1 (0.25|0.5|0.5|0|0): Failed (0|0|0|0|0)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Client exited with unexpected exit code 1
+Server log mismatch
+---
+							      >	Server Provided Port: 6000
+							      >	Now registering function add2
+							      >	Function add2 successfully registered
+							      >	Function pointer for add2: 0x5561ddb318c0
+handler add2_i8: arguments 1 and 1			      <
+---
+Client log mismatch
+---
+							      >	Client Provided Port: 6000
+							      >	Attempting to find function: non-exist
+							      >	Length of name sent: 9
+							      >	Name sent: non-exist
+							      >	Find error or no function matched the name
+rpc_find: instance 0, returned handle for function add2	      |	Attempting to find function: add2
+							      >	Length of name sent: 4
+							      >	Name sent: add2
+							      >	Find error or no function matched the name
+							      >	rpc_find: instance 0, wasn't able to find function add2
+rpc_call: instance 0, call of add2 received result 2	      |	Test Framework: instance 0, cannot find handle for function a
+rpc_close_client: instance 0				      <
+---
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Task A 127+127 (0|0.25|0.25|0|0): Failed (0|0|0|0|0)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Client exited with unexpected exit code 1
+Server log mismatch
+---
+							      >	Server Provided Port: 6000
+							      >	Now registering function add2
+							      >	Function add2 successfully registered
+							      >	Function pointer for add2: 0x564c542ac8c0
+handler add2_i8: arguments 127 and 127			      <
+---
+Client log mismatch
+---
+							      >	Client Provided Port: 6000
+rpc_find: instance 0, returned handle for function add2	      |	Attempting to find function: add2
+							      >	Length of name sent: 4
+							      >	Name sent: add2
+							      >	Find error or no function matched the name
+							      >	rpc_find: instance 0, wasn't able to find function add2
+rpc_call: instance 0, call of add2 received result 254	      |	Test Framework: instance 0, cannot find handle for function a
+rpc_close_client: instance 0				      <
+---
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Task A abc (0.25|0.25|0.25|0|0): Failed (0|0|0|0|0)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Client exited with unexpected exit code 1
+Server log mismatch
+---
+							      >	Server Provided Port: 6001
+							      >	Now registering function echo2
+							      >	Function echo2 successfully registered
+							      >	Function pointer for echo2: 0x55d624110970
+handler echo2: data1 1337, data2 sha256 ba7816b		      <
+---
+Client log mismatch
+---
+							      >	Client Provided Port: 6001
+							      >	Attempting to find function: add2
+							      >	Length of name sent: 4
+							      >	Name sent: add2
+							      >	Find error or no function matched the name
+rpc_find: instance 0, returned handle for function echo2      |	Attempting to find function: echo2
+							      >	Length of name sent: 5
+							      >	Name sent: echo2
+							      >	Find error or no function matched the name
+							      >	rpc_find: instance 0, wasn't able to find function echo2
+rpc_call: instance 0, call of echo2 received data1 = 1337, da |	Test Framework: instance 0, cannot find handle for function e
+rpc_close_client: instance 0				      <
+---
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Task A call-twice (0|0|0|0.25|0): Failed (0|0|0|0|0)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Client exited with unexpected exit code 1
+Server log mismatch
+---
+							      >	Server Provided Port: 6001
+							      >	Now registering function add2
+							      >	Function add2 successfully registered
+							      >	Function pointer for add2: 0x55c3ac1088c0
+handler add2_i8: arguments 127 and 127			      <
+handler add2_i8: arguments -127 and -127		      <
+---
+Client log mismatch
+---
+							      >	Client Provided Port: 6001
+rpc_find: instance 0, returned handle for function add2	      |	Attempting to find function: add2
+							      >	Length of name sent: 4
+							      >	Name sent: add2
+							      >	Find error or no function matched the name
+							      >	rpc_find: instance 0, wasn't able to find function add2
+rpc_call: instance 0, call of add2 received result 254	      |	Test Framework: instance 0, cannot find handle for function a
+rpc_call: instance 0, calling add2, with arguments -127 -127. <
+rpc_call: instance 0, call of add2 received result -254	      <
+rpc_close_client: instance 0				      <
+---
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Task A call2 (0.25|0|0|0.5|0): Failed (0|0|0|0|0)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Client exited with unexpected exit code 1
+Server log mismatch
+---
+							      >	Server Provided Port: 6000
+							      >	Now registering function echo2
+							      >	Function echo2 successfully registered
+							      >	Function pointer for echo2: 0x5599c4395970
+							      >	Now registering function add2
+							      >	Function add2 successfully registered
+							      >	Function pointer for add2: 0x5599c43958c0
+handler echo2: data1 0, data2 sha256 55a10ed		      <
+handler add2_i8: arguments 80 and -40			      <
+---
+Client log mismatch
+---
+							      >	Client Provided Port: 6000
+rpc_find: instance 0, returned handle for function add2	      |	Attempting to find function: add2
+							      >	Length of name sent: 4
+							      >	Name sent: add2
+							      >	Find error or no function matched the name
+							      >	rpc_find: instance 0, wasn't able to find function add2
+rpc_find: instance 0, returned handle for function echo2      |	Attempting to find function: echo2
+							      >	Length of name sent: 5
+							      >	Name sent: echo2
+							      >	Find error or no function matched the name
+							      >	rpc_find: instance 0, wasn't able to find function echo2
+rpc_call: instance 0, call of echo2 received data1 = 0, data2 |	Test Framework: instance 0, cannot find handle for function e
+rpc_call: instance 0, calling add2, with arguments 80 -40...  <
+rpc_call: instance 0, call of add2 received result 40	      <
+rpc_close_client: instance 0				      <
+---
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Task A switch1 (0|0|0|0.25|0): Failed (0|0|0|0|0)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Client exited with unexpected exit code 1
+Server log mismatch
+---
+							      >	Server Provided Port: 6000
+							      >	Now registering function add2
+							      >	Function add2 successfully registered
+							      >	Function pointer for add2: 0x55d6069f88c0
+							      >	Server Provided Port: 6001
+							      >	Now registering function echo2
+							      >	Function echo2 successfully registered
+							      >	Function pointer for echo2: 0x55d6069f8970
+handler echo2: data1 0, data2 sha256 ba7816b		      <
+---
+Client log mismatch
+---
+							      >	Client Provided Port: 6001
+							      >	Attempting to find function: add2
+							      >	Length of name sent: 4
+							      >	Name sent: add2
+							      >	Find error or no function matched the name
+rpc_find: instance 0, returned handle for function echo2      |	Attempting to find function: echo2
+							      >	Length of name sent: 5
+							      >	Name sent: echo2
+							      >	Find error or no function matched the name
+							      >	rpc_find: instance 0, wasn't able to find function echo2
+rpc_call: instance 0, call of echo2 received data1 = 0, data2 |	Test Framework: instance 0, cannot find handle for function e
+rpc_close_client: instance 0				      <
+---
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Task A bad-func-client (0|0|0|0|0.25): Failed (0|0|0|0|0)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Client exited with unexpected exit code 1
+Server log mismatch
+---
+							      >	Server Provided Port: 6000
+							      >	Now registering function add2
+							      >	Function add2 successfully registered
+							      >	Function pointer for add2: 0x5556612368c0
+---
+Client log mismatch
+---
+							      >	Client Provided Port: 6000
+							      >	Attempting to find function: non-exist
+							      >	Length of name sent: 9
+							      >	Name sent: non-exist
+							      >	Find error or no function matched the name
+rpc_find: instance 0, returned handle for function add2	      |	Attempting to find function: add2
+rpc_call: instance 0, incorrect call of add2 failed	      |	Length of name sent: 4
+rpc_call: instance 0, incorrect call of add2 failed	      |	Name sent: add2
+rpc_call: instance 0, incorrect call of add2 failed	      |	Find error or no function matched the name
+rpc_close_client: instance 0				      |	rpc_find: instance 0, wasn't able to find function add2
+							      >	Test Framework: instance 0, cannot find handle for function a
+---
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Task A bad-func-server (0|0|0|0|0.25): Failed (0|0|0|0|0)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Client exited with unexpected exit code 1
+Server log mismatch
+---
+							      >	Server Provided Port: 6000
+							      >	Now registering function bad_null
+							      >	Function bad_null successfully registered
+							      >	Function pointer for bad_null: 0x5565c0a1ac30
+							      >	Now registering function bad_data2_1
+							      >	Function bad_data2_1 successfully registered
+							      >	Function pointer for bad_data2_1: 0x5565c0a1ab40
+							      >	Now registering function bad_data2_2
+							      >	Function bad_data2_2 successfully registered
+							      >	Function pointer for bad_data2_2: 0x5565c0a1abb0
+handler null: called					      <
+handler bad_data2_v1: called				      <
+handler bad_data2_v2: called				      <
+---
+Client log mismatch
+---
+							      >	Client Provided Port: 6000
+							      >	Attempting to find function: non-exist
+							      >	Length of name sent: 9
+							      >	Name sent: non-exist
+							      >	Find error or no function matched the name
+rpc_find: instance 0, returned handle for function bad_null   |	Attempting to find function: bad_null
+							      >	Length of name sent: 8
+							      >	Name sent: bad_null
+							      >	Find error or no function matched the name
+							      >	rpc_find: instance 0, wasn't able to find function bad_null
+rpc_find: instance 0, returned handle for function bad_data2_ |	Attempting to find function: bad_data2_1
+							      >	Length of name sent: 11
+							      >	Name sent: bad_data2_1
+							      >	Find error or no function matched the name
+							      >	rpc_find: instance 0, wasn't able to find function bad_data2_
+rpc_find: instance 0, returned handle for function bad_data2_ |	Attempting to find function: bad_data2_2
+							      >	Length of name sent: 11
+							      >	Name sent: bad_data2_2
+							      >	Find error or no function matched the name
+							      >	rpc_find: instance 0, wasn't able to find function bad_data2_
+rpc_call: instance 0, call of bad_null failed		      |	Test Framework: instance 0, cannot find handle for function b
+rpc_call: instance 0, calling bad_data2_1, with arguments 1 1 <
+rpc_call: instance 0, call of bad_data2_1 failed	      <
+rpc_call: instance 0, calling bad_data2_2, with arguments 1 1 <
+rpc_call: instance 0, call of bad_data2_2 failed	      <
+rpc_close_client: instance 0				      <
+---
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Task 5 endian1-da7a (0.10): Failed
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Client exited with unexpected exit code 1
+Server log mismatch
+---
+							      >	Server Provided Port: 1337
+							      >	Now registering function add2_2
+							      >	Function add2_2 successfully registered
+							      >	Function pointer for add2_2: 0x5627f573e810
+handler add2_2: arguments 55931 and -1			      <
+---
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Task 5 endian2-f (0.20): Failed
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Client exited with unexpected exit code 1
+Server log mismatch
+---
+							      >	Server Provided Port: 1337
+							      >	Now registering function add2_2
+							      >	Function add2_2 successfully registered
+							      >	Function pointer for add2_2: 0x5653b3003810
+handler add2_2: arguments -127 and 126			      <
+---
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Task 5 endian3-max (0.20): Failed
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Client exited with unexpected exit code 1
+Server log mismatch
+---
+							      >	Server Provided Port: 1337
+							      >	Now registering function add2_2
+							      >	Function add2_2 successfully registered
+							      >	Function pointer for add2_2: 0x55e846e4e810
+handler add2_2: arguments 2147483646 and 1		      <
+---
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Task 9 block1 (0.25): Skipping, #define missing...
+Task 9 block2 (0.25): Skipping, #define missing...
+
+NO REPORT SUBMITTED
+
+=============== START RESULTS TABLE ===============
+Task  1: Client finds module on server        .25
+Task  2: Remote procedure is called correctly 0
+Task  3: Results are returned to client       0
+Task  4: Supports multiple procedures         0
+Task 5A: Portability                          0
+Task 5B: Safety                               0
+Task  6: Build quality                        .5
+Task  7: Quality of software practices        #CODE_QUALITY#
+Task  8: Planning and Protocol description    0
+Task  9: Non-blocking                         0
+Late penalty:                                 -15
+================ END RESULTS TABLE ================

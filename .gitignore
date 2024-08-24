@@ -2,8 +2,8 @@
 test.sh
 testval.sh
 src-proj1/
-skel_client.c
-skel_server.c
+src/skel_client.c
+src/skel_server.c
 *.a
 todo.txt
 skel-client

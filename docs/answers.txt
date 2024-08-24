@@ -1,0 +1,102 @@
+James La Fontaine, jlafontaine, 1079860
+
+1. Should the server accept calls from everyone, or just a subset of users?
+
+   Depending on the type of operations the server provides, it may be reasonable to accept calls from everyone.
+   However, if malicious users overloading the server with requests is a concern, or the server provides functions
+   which have reason not to be publicly available, then the server should only accept calls from a subset of users.
+
+2. Should authentication etc. be provided by the RPC framework, 
+   or by the functions that use the RPC framework?
+
+   Authentication should be provided by the RPC framework as it is ultimately what creates and handles the connections between
+   client and server. Additionally, a large portion of developers utilising the RPC framework will likely
+   require the ability to authenticate and thus should not all be required to fully implement it themselves.
+
+3. What transport layer protocol should be used? What are the tradeoffs
+
+   TCP is the transport layer protocol that should be used as it deals with IP layer packet loss, duplication and the
+   maximum size restrictions of IP packets. Therefore, TCP is reliable. TCP also ensures that bytes arrive in order. However,
+   a tradeoff that TCP makes to fulfill these conditions is speed: a transport layer protocol like UDP is faster
+   than TCP at the expense of reliability. Unless this RPC system was specifically being designed for time-sensitive procedures,
+   TCP seems like a suitable choice of transport layer protocol.
+
+4. In which function(s) should the socket(s) be created?
+
+   The listening socket should be created in rpc_init_server() as this is where the port is provided. The socket for the connection should be created
+   in rpc_serve_all() as this is when the server starts accepting client connections. The client socket should be created in rpc_init_client() as 
+   this is where the port and address are provided.
+
+
+5. Should rpc_client and rpc_server be allocated dynamically or statically? 
+   What are the implications for the client and server code?
+	
+   rpc_client and rpc_server should be allocated dynamically so that they remain in memory after
+   the function which initialises them returns. The client and server code will have to free them to avoid memory leaks.
+   However, since the server loops indefinitely it will not be able to free rpc_server unless signal handling was implemented.
+
+6. What happens if one host uses big-endian byte order and the other uses little-endian? 
+   How does that relate to "network byte order"?
+
+   If hosts use different byte orderings then they will interpret the same sequence of bytes as different numbers
+   due to the different assumptions they make about byte ordering. Using network byte ordering (defined to always be big-endian)  
+   allows the hosts to exchange information without confusion because of byte ordering.
+
+
+Application Layer Protocol Documentation for the RPC system:
+
+TCP is the transport layer protocol that will be used. This will deal with IP layer packet loss and duplication as TCP retransmits
+lost packets and discards duplicate packets when needed. TCP also handles the fact that IP packets have a
+maximum allowed size by sending data in segments / a byte stream comprised of multiple IP packets.
+
+1st byte for all messages is a character prefix denoting the type of message being sent ('f' for find, 'c' for call, 'r' for response, 'e' for error)
+
+For find messages, the following 2 bytes denote the length (x) of the function name in bytes, and the remaining x bytes (up to 1000)
+form the function name.
+
+For find response messages, the second byte denotes whether the function was found or not ('s' for success, 'f' for failure)
+
+For call messages, the following 2 bytes denote the length (x) of the function name in bytes, the subsequent x bytes (up to 1000)
+ represent the name of the function to be called, the next 8 bytes after that represent data1, followed by 1 character byte indicating malformed data2 input 
+ ('m' for malformed, 'v' for valid), followed by 8 bytes indicating data2_len, followed by data2_len bytes containing data2 (up to 100kB)
+
+For call response messages, the following 8 bytes contain data1, followed by 1 character byte indicating malformed data2 input ('m' for malformed, 'v' for valid), 
+followed by 8 bytes indicating data2_len, followed by data2_len bytes containing data2 (up to 100kB)
+
+For error messages, there is simply a single second byte that denotes the error code depending on the type of failure.
+
+Fixed sized field used for data2_len (8 bytes) for simplicity under the assumption that size_t is not larger than 64 bits for any architecture using the rpc system.
+
+Numbers are sent in big endian (network byte order)
+
+
+
+Example packet format for call request:
+
+                                                          
+  0  1  2  3  4  5  6  7  0  1  2  3  4  5  6  7  0  1  2  3  4  5  6  7  
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+|    Message type       |              Function name length             | 
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+|                                                                       |
+|                       Function name (up to 1kB)                       |
+|                                ...                                    |
+|                                ...                                    |
+|                                ...                                    |
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+|                                                                       |
+|                          Data 1 (8 bytes)     +--+--+--+--+--+--+--+--+                        
+|                                               |  Malformity indicator |                 
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+|                                                                       |
+|                       Data 2 length (8 bytes) +--+--+--+--+--+--+--+--+                        
+|                                               |                       |                 
++--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+                       |
+|                                                                       |
+|                         Data 2 (up to 100kB)                          | 
+|                                ...                                    |
+|                                ...                                    |
+|                                ...                                    |
+|                                ...                                    |
+|                                ...                                    |
+|                                ...                                    |
